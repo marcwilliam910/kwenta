@@ -37,6 +37,7 @@ type RecipeErrors = {
   servings?: string;
   targetProfit?: string;
   ingredients?: string;
+  insufficientStock?: string;
 };
 
 export function validateRecipe(
@@ -75,6 +76,46 @@ export function validateRecipe(
   return isValid;
 }
 
+// Helper function to validate stock availability
+type StockValidationResult = {
+  isValid: boolean;
+  insufficientItems: Array<{name: string; requested: number; available: number}>;
+};
+
+export function validateStockAvailability(
+  selectedIngredients: Record<string, number>,
+  ingredientsList: Array<{$id: string; name: string; stock: number}>,
+  previousIngredients?: Record<string, number>,
+): StockValidationResult {
+  const insufficientItems: Array<{
+    name: string;
+    requested: number;
+    available: number;
+  }> = [];
+
+  for (const [ingredientId, requestedQty] of Object.entries(selectedIngredients)) {
+    const ingredient = ingredientsList.find((ing) => ing.$id === ingredientId);
+    if (!ingredient) continue;
+
+    // Calculate effective available stock (current stock + what would be restored from previous recipe)
+    const previousQty = previousIngredients?.[ingredientId] || 0;
+    const effectiveAvailable = ingredient.stock + previousQty;
+
+    if (requestedQty > effectiveAvailable) {
+      insufficientItems.push({
+        name: ingredient.name,
+        requested: requestedQty,
+        available: effectiveAvailable,
+      });
+    }
+  }
+
+  return {
+    isValid: insufficientItems.length === 0,
+    insufficientItems,
+  };
+}
+
 export default function Recipes() {
   const {
     recipes,
@@ -84,7 +125,7 @@ export default function Recipes() {
     editRecipe,
     initialFetchRecipes,
   } = useRecipes();
-  const {ingredients} = useIngredients();
+  const {ingredients, editIngredient: updateIngredientStock} = useIngredients();
   const [isCustomProfit, setIsCustomProfit] = useState(false);
   const [customProfit, setCustomProfit] = useState("");
   const insets = useSafeAreaInsets();
@@ -127,6 +168,10 @@ export default function Recipes() {
       }
       return copy;
     });
+    // Clear insufficient stock error when ingredients change
+    if (errors.insufficientStock) {
+      setErrors((prev) => ({...prev, insufficientStock: undefined}));
+    }
   };
 
   // update quantity
@@ -135,6 +180,10 @@ export default function Recipes() {
       ...prev,
       [id]: value,
     }));
+    // Clear insufficient stock error when quantity changes
+    if (errors.insufficientStock) {
+      setErrors((prev) => ({...prev, insufficientStock: undefined}));
+    }
   };
 
   // Modal handlers
@@ -179,6 +228,26 @@ export default function Recipes() {
 
     if (!validateRecipe(input, setErrors)) return;
 
+    // Validate stock availability
+    const stockValidation = validateStockAvailability(
+      numericIngredients,
+      ingredients,
+    );
+
+    if (!stockValidation.isValid) {
+      const errorMessages = stockValidation.insufficientItems
+        .map(
+          (item) =>
+            `${item.name}: need ${item.requested}, only ${item.available} available`,
+        )
+        .join("\n");
+      setErrors((prev) => ({
+        ...prev,
+        insufficientStock: `Insufficient stock:\n${errorMessages}`,
+      }));
+      return;
+    }
+
     try {
       const payload = {
         ...input,
@@ -188,9 +257,20 @@ export default function Recipes() {
       const res = await addRecipe(payload);
 
       if (res.$id) {
+        // Deduct stock from each ingredient used
+        for (const [ingredientId, usedQty] of Object.entries(
+          numericIngredients,
+        )) {
+          const ingredient = ingredients.find((ing) => ing.$id === ingredientId);
+          if (ingredient) {
+            const newStock = ingredient.stock - usedQty;
+            await updateIngredientStock(ingredientId, {stock: newStock});
+          }
+        }
+
         showMessage({
           message: "Recipe added",
-          description: `${input.name} has been added to your recipes.`,
+          description: `${input.name} has been added to your recipes. Ingredient stock has been updated.`,
           type: "success",
         });
       }
@@ -256,6 +336,31 @@ export default function Recipes() {
 
     if (!validateRecipe(input, setErrors)) return;
 
+    // Get the original recipe to calculate stock differences
+    const originalRecipe = recipes.find((r) => r.$id === selectedId);
+    const originalIngredients = originalRecipe?.ingredients || {};
+
+    // Validate stock availability (considering what will be restored from original recipe)
+    const stockValidation = validateStockAvailability(
+      numericIngredients,
+      ingredients,
+      originalIngredients,
+    );
+
+    if (!stockValidation.isValid) {
+      const errorMessages = stockValidation.insufficientItems
+        .map(
+          (item) =>
+            `${item.name}: need ${item.requested}, only ${item.available} available`,
+        )
+        .join("\n");
+      setErrors((prev) => ({
+        ...prev,
+        insufficientStock: `Insufficient stock:\n${errorMessages}`,
+      }));
+      return;
+    }
+
     try {
       const payload = {
         ...input,
@@ -264,9 +369,32 @@ export default function Recipes() {
 
       setIsSubmitting(true);
       await editRecipe(selectedId, payload);
+
+      // Adjust stock based on the difference between old and new quantities
+      // Collect all ingredient IDs from both old and new
+      const allIngredientIds = new Set([
+        ...Object.keys(originalIngredients),
+        ...Object.keys(numericIngredients),
+      ]);
+
+      for (const ingredientId of allIngredientIds) {
+        const ingredient = ingredients.find((ing) => ing.$id === ingredientId);
+        if (!ingredient) continue;
+
+        const oldQty = originalIngredients[ingredientId] || 0;
+        const newQty = numericIngredients[ingredientId] || 0;
+        const difference = newQty - oldQty;
+
+        if (difference !== 0) {
+          // If difference > 0, we need more (deduct). If difference < 0, we used less (restore).
+          const newStock = ingredient.stock - difference;
+          await updateIngredientStock(ingredientId, {stock: newStock});
+        }
+      }
+
       showMessage({
         message: "Recipe Updated",
-        description: `${input.name} has been updated in your recipes.`,
+        description: `${input.name} has been updated. Ingredient stock has been adjusted.`,
         type: "success",
       });
     } catch (err) {
@@ -649,6 +777,21 @@ export default function Recipes() {
                     <Text className="text-xs text-red-500">
                       {errors.ingredients}
                     </Text>
+                  )}
+                  {errors.insufficientStock && (
+                    <View className="p-3 mt-2 border border-red-200 bg-red-50 rounded-xl">
+                      <View className="flex-row items-start gap-2">
+                        <Ionicons
+                          name="alert-circle"
+                          size={16}
+                          color="#DC2626"
+                          style={{marginTop: 2}}
+                        />
+                        <Text className="flex-1 text-xs text-red-600">
+                          {errors.insufficientStock}
+                        </Text>
+                      </View>
+                    </View>
                   )}
                 </View>
 
