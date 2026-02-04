@@ -1,35 +1,32 @@
 import Ionicons from "@expo/vector-icons/Ionicons";
-import {Redirect, Tabs, router} from "expo-router";
-import {StatusBar, Text, View} from "react-native";
-import {SafeAreaView} from "react-native-safe-area-context";
+import { Redirect, Tabs, router } from "expo-router";
+import { StatusBar, Text, View } from "react-native";
+import { SafeAreaView } from "react-native-safe-area-context";
 
 import Header from "@/components/Header";
-import {useAuth} from "@/context/AuthContext";
-import {useReadAlert} from "@/context/ReadAlertContext";
+import { useAuth } from "@/context/AuthContext";
+import { useReadAlert } from "@/context/ReadAlertContext";
 import NotificationService from "@/lib/services/notificationService";
 import * as Notifications from "expo-notifications";
-import {useEffect, useRef} from "react";
+import { useEffect, useRef } from "react";
 
 const getIconName = (routeName: string): keyof typeof Ionicons.glyphMap => {
   const icons: Record<
-    "index" | "recipes" | "inventory" | "alerts",
+    "index" | "recipes" | "inventory" | "expenses" | "alerts",
     keyof typeof Ionicons.glyphMap
   > = {
     index: "trending-up-outline",
     recipes: "calculator-outline",
     inventory: "cube-outline",
+    expenses: "wallet-outline",
     alerts: "notifications-outline",
   };
   return icons[routeName as keyof typeof icons];
 };
 
 export default function TabLayout() {
-  const {user} = useAuth();
-  const {unreadCount} = useReadAlert();
-
-  if (!user) {
-    return <Redirect href="/(auth)/login" />;
-  }
+  const { user } = useAuth();
+  const { unreadCount } = useReadAlert();
 
   const notificationListener = useRef<Notifications.EventSubscription | null>(
     null,
@@ -37,6 +34,8 @@ export default function TabLayout() {
   const responseListener = useRef<Notifications.EventSubscription | null>(null);
 
   useEffect(() => {
+    if (!user) return;
+
     // Register for push notifications (async)
     const setupNotifications = async () => {
       try {
@@ -68,17 +67,21 @@ export default function TabLayout() {
       notificationListener.current?.remove();
       responseListener.current?.remove();
     };
-  }, []); // Empty dependency array - run only once
+  }, [user]);
+
+  if (!user) {
+    return <Redirect href="/(auth)/login" />;
+  }
 
   return (
     <SafeAreaView className="relative flex-1" edges={["top", "left", "right"]}>
       <StatusBar barStyle="dark-content" backgroundColor="#fef2f2" />
       <Header />
       <Tabs
-        screenOptions={({route}) => ({
+        screenOptions={({ route }) => ({
           tabBarHideOnKeyboard: true,
           headerShown: false,
-          tabBarIcon: ({focused}) => {
+          tabBarIcon: ({ focused }) => {
             const iconName = getIconName(route.name);
             const color = focused ? "#10b981" : "#6b7280";
 
@@ -109,10 +112,11 @@ export default function TabLayout() {
           tabBarInactiveTintColor: "#6b7280",
         })}
       >
-        <Tabs.Screen name="index" options={{title: "Dashboard"}} />
-        <Tabs.Screen name="recipes" options={{title: "Recipes"}} />
-        <Tabs.Screen name="inventory" options={{title: "Inventory"}} />
-        <Tabs.Screen name="alerts" options={{title: "Alerts"}} />
+        <Tabs.Screen name="index" options={{ title: "Dashboard" }} />
+        <Tabs.Screen name="recipes" options={{ title: "Recipes" }} />
+        <Tabs.Screen name="inventory" options={{ title: "Inventory" }} />
+        <Tabs.Screen name="expenses" options={{ title: "Expenses" }} />
+        <Tabs.Screen name="alerts" options={{ title: "Alerts" }} />
       </Tabs>
     </SafeAreaView>
   );

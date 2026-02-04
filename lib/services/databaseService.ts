@@ -1,6 +1,6 @@
-import {AppwriteIngredient} from "@/app/(tabs)/inventory";
-import {Query} from "react-native-appwrite";
-import {appwriteConfig, databases, ID} from "../appwrite";
+import { AppwriteIngredient } from "@/app/(tabs)/inventory";
+import { Query } from "react-native-appwrite";
+import { appwriteConfig, databases, ID } from "../appwrite";
 
 export const createDocument = async (
   collectionId: string,
@@ -109,4 +109,34 @@ export async function getExpiringIngredients(
   );
 
   return expiringIngredients;
+}
+
+export async function getMonthlyData(
+  collectionId: string,
+  userId: string,
+  month: number,
+  year: number
+) {
+  const res = await databases.listDocuments(
+    appwriteConfig.databaseId,
+    collectionId,
+    [
+      Query.equal("userId", userId),
+      Query.equal("month", month),
+      Query.equal("year", year),
+      Query.orderDesc("$createdAt"),
+    ]
+  );
+
+  return res.documents;
+}
+
+export async function getAllUserData(collectionId: string, userId: string) {
+  const res = await databases.listDocuments(
+    appwriteConfig.databaseId,
+    collectionId,
+    [Query.equal("userId", userId), Query.orderDesc("$createdAt")]
+  );
+
+  return res.documents;
 }

@@ -1,4 +1,4 @@
-import {Account, Client, Databases, ID} from "react-native-appwrite";
+import { Account, Client, Databases, ID } from "react-native-appwrite";
 
 // Initialize the Appwrite client
 const client = new Client();
@@ -13,7 +13,7 @@ export const account = new Account(client);
 export const databases = new Databases(client);
 
 // Export the client and ID helper
-export {client, ID};
+export { client, ID };
 
 // Configuration constants
 export const appwriteConfig = {
@@ -23,4 +23,6 @@ export const appwriteConfig = {
   usersCollectionId: "users",
   ingredientsCollectionId: "ingredients",
   recipesCollectionId: "recipes",
+  expensesCollectionId: "expenses",
+  salesCollectionId: "sales",
 };

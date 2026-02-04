@@ -1,10 +1,10 @@
 import IngredientSelectionCard from "@/components/IngredientSelectionCard";
 import RecipeCard from "@/components/RecipeCard";
-import {useIngredients} from "@/context/IngredientsContext";
-import {useRecipes} from "@/context/RecipesContext";
+import { useIngredients } from "@/context/IngredientsContext";
+import { useRecipes } from "@/context/RecipesContext";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import {useFocusEffect} from "expo-router";
-import {useCallback, useMemo, useRef, useState} from "react";
+import { useFocusEffect } from "expo-router";
+import { useCallback, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,8 +21,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import {showMessage} from "react-native-flash-message";
-import {useSafeAreaInsets} from "react-native-safe-area-context";
+import { showMessage } from "react-native-flash-message";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 // types
 type RecipeInput = {
@@ -79,33 +79,67 @@ export function validateRecipe(
 // Helper function to validate stock availability
 type StockValidationResult = {
   isValid: boolean;
-  insufficientItems: Array<{name: string; requested: number; available: number}>;
+  insufficientItems: {
+    name: string;
+    requested: number;
+    available: number;
+    unit: string;
+  }[];
+};
+
+type StockIngredient = {
+  $id: string;
+  name: string;
+  stock: number;
+  unit: string;
+  quantity: number;
+};
+
+const formatAmount = (value: number) => {
+  return Number.isInteger(value) ? value.toString() : value.toFixed(2);
+};
+
+const getPackUsage = (requestedQty: number, ingredient: StockIngredient) => {
+  const unit = ingredient.unit?.toLowerCase();
+  if (unit === "piece") return requestedQty;
+  const packSize = ingredient.quantity;
+  if (!packSize || isNaN(packSize) || packSize <= 0) return 0;
+  return requestedQty / packSize;
 };
 
 export function validateStockAvailability(
   selectedIngredients: Record<string, number>,
-  ingredientsList: Array<{$id: string; name: string; stock: number}>,
+  ingredientsList: StockIngredient[],
   previousIngredients?: Record<string, number>,
 ): StockValidationResult {
-  const insufficientItems: Array<{
+  const insufficientItems: {
     name: string;
     requested: number;
     available: number;
-  }> = [];
+    unit: string;
+  }[] = [];
 
   for (const [ingredientId, requestedQty] of Object.entries(selectedIngredients)) {
     const ingredient = ingredientsList.find((ing) => ing.$id === ingredientId);
     if (!ingredient) continue;
 
-    // Calculate effective available stock (current stock + what would be restored from previous recipe)
+    // Calculate effective available stock in packs (current stock + restore from previous recipe)
     const previousQty = previousIngredients?.[ingredientId] || 0;
-    const effectiveAvailable = ingredient.stock + previousQty;
+    const previousPackUsage = getPackUsage(previousQty, ingredient);
+    const effectiveAvailablePacks = ingredient.stock + previousPackUsage;
+    const requestedPackUsage = getPackUsage(requestedQty, ingredient);
+    const unit = ingredient.unit || "";
+    const availableAmount =
+      unit.toLowerCase() === "piece"
+        ? effectiveAvailablePacks
+        : effectiveAvailablePacks * ingredient.quantity;
 
-    if (requestedQty > effectiveAvailable) {
+    if (requestedPackUsage > effectiveAvailablePacks) {
       insufficientItems.push({
         name: ingredient.name,
         requested: requestedQty,
-        available: effectiveAvailable,
+        available: availableAmount,
+        unit,
       });
     }
   }
@@ -125,7 +159,7 @@ export default function Recipes() {
     editRecipe,
     initialFetchRecipes,
   } = useRecipes();
-  const {ingredients, editIngredient: updateIngredientStock} = useIngredients();
+  const { ingredients, editIngredient: updateIngredientStock } = useIngredients();
   const [isCustomProfit, setIsCustomProfit] = useState(false);
   const [customProfit, setCustomProfit] = useState("");
   const insets = useSafeAreaInsets();
@@ -139,7 +173,7 @@ export default function Recipes() {
   const [selectedIngredients, setSelectedIngredients] = useState<{
     [id: string]: string;
   }>({});
-  const {height} = useWindowDimensions();
+  const { height } = useWindowDimensions();
   const usableHeight = height - insets.top - insets.bottom;
 
   // Modal state
@@ -160,7 +194,7 @@ export default function Recipes() {
   // toggle selection
   const toggleIngredient = (id: string) => {
     setSelectedIngredients((prev) => {
-      const copy = {...prev};
+      const copy = { ...prev };
       if (copy[id] !== undefined) {
         delete copy[id]; // deselect
       } else {
@@ -170,7 +204,7 @@ export default function Recipes() {
     });
     // Clear insufficient stock error when ingredients change
     if (errors.insufficientStock) {
-      setErrors((prev) => ({...prev, insufficientStock: undefined}));
+      setErrors((prev) => ({ ...prev, insufficientStock: undefined }));
     }
   };
 
@@ -182,7 +216,7 @@ export default function Recipes() {
     }));
     // Clear insufficient stock error when quantity changes
     if (errors.insufficientStock) {
-      setErrors((prev) => ({...prev, insufficientStock: undefined}));
+      setErrors((prev) => ({ ...prev, insufficientStock: undefined }));
     }
   };
 
@@ -199,7 +233,7 @@ export default function Recipes() {
   }, []);
 
   const cleanInputFields = () => {
-    setNewRecipe({name: "", servings: "", targetProfit: ""});
+    setNewRecipe({ name: "", servings: "", targetProfit: "" });
     setIsCustomProfit(false);
     setCustomProfit("");
     setSelectedIngredients({});
@@ -238,7 +272,7 @@ export default function Recipes() {
       const errorMessages = stockValidation.insufficientItems
         .map(
           (item) =>
-            `${item.name}: need ${item.requested}, only ${item.available} available`,
+            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`,
         )
         .join("\n");
       setErrors((prev) => ({
@@ -263,8 +297,9 @@ export default function Recipes() {
         )) {
           const ingredient = ingredients.find((ing) => ing.$id === ingredientId);
           if (ingredient) {
-            const newStock = ingredient.stock - usedQty;
-            await updateIngredientStock(ingredientId, {stock: newStock});
+            const packUsage = getPackUsage(usedQty, ingredient);
+            const newStock = ingredient.stock - packUsage;
+            await updateIngredientStock(ingredientId, { stock: newStock });
           }
         }
 
@@ -310,8 +345,8 @@ export default function Recipes() {
       "Delete Recipe",
       "Are you sure you want to delete this recipe? This action cannot be undone.",
       [
-        {text: "Cancel", style: "cancel"},
-        {text: "Delete", style: "destructive", onPress: confirmDelete},
+        { text: "Cancel", style: "cancel" },
+        { text: "Delete", style: "destructive", onPress: confirmDelete },
       ],
     );
   };
@@ -351,7 +386,7 @@ export default function Recipes() {
       const errorMessages = stockValidation.insufficientItems
         .map(
           (item) =>
-            `${item.name}: need ${item.requested}, only ${item.available} available`,
+            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`,
         )
         .join("\n");
       setErrors((prev) => ({
@@ -383,12 +418,14 @@ export default function Recipes() {
 
         const oldQty = originalIngredients[ingredientId] || 0;
         const newQty = numericIngredients[ingredientId] || 0;
-        const difference = newQty - oldQty;
+        const oldPackUsage = getPackUsage(oldQty, ingredient);
+        const newPackUsage = getPackUsage(newQty, ingredient);
+        const difference = newPackUsage - oldPackUsage;
 
         if (difference !== 0) {
           // If difference > 0, we need more (deduct). If difference < 0, we used less (restore).
           const newStock = ingredient.stock - difference;
-          await updateIngredientStock(ingredientId, {stock: newStock});
+          await updateIngredientStock(ingredientId, { stock: newStock });
         }
       }
 
@@ -433,7 +470,7 @@ export default function Recipes() {
   };
 
   const onFormChange = (field: string, value: string) => {
-    setNewRecipe((prev) => ({...prev, [field]: value}));
+    setNewRecipe((prev) => ({ ...prev, [field]: value }));
   };
 
   useFocusEffect(
@@ -452,11 +489,11 @@ export default function Recipes() {
   }
 
   return (
-    <View style={{flex: 1}}>
+    <View style={{ flex: 1 }}>
       {recipes.length === 0 ? (
         <View
           className="items-center justify-center px-8"
-          style={{height: usableHeight - 100}}
+          style={{ height: usableHeight - 100 }}
         >
           {/* Icon Container */}
           <View className="items-center justify-center w-24 h-24 mb-6 bg-gray-100 rounded-full">
@@ -499,7 +536,7 @@ export default function Recipes() {
           </View>
         </View>
       ) : (
-        <View style={{flex: 1}}>
+        <View style={{ flex: 1 }}>
           {/* Header with Add Button */}
           <View className="flex-row items-center justify-between p-4">
             <Text className="text-xl font-bold text-gray-900">My Recipes</Text>
@@ -523,7 +560,7 @@ export default function Recipes() {
               />
             }
             data={sortedRecipes}
-            renderItem={({item}) => (
+            renderItem={({ item }) => (
               <RecipeCard
                 recipe={item}
                 className="bg-white"
@@ -634,19 +671,17 @@ export default function Recipes() {
                             onFormChange("targetProfit", percentage);
                             setIsCustomProfit(false);
                           }}
-                          className={`flex-1 py-3 rounded-xl border-2 ${
-                            newRecipe.targetProfit === percentage
-                              ? "border-emerald-500 bg-emerald-50"
-                              : "border-gray-200 bg-white"
-                          }`}
+                          className={`flex-1 py-3 rounded-xl border-2 ${newRecipe.targetProfit === percentage
+                            ? "border-emerald-500 bg-emerald-50"
+                            : "border-gray-200 bg-white"
+                            }`}
                           activeOpacity={0.8}
                         >
                           <Text
-                            className={`text-center font-medium ${
-                              newRecipe.targetProfit === percentage
-                                ? "text-emerald-700"
-                                : "text-gray-700"
-                            }`}
+                            className={`text-center font-medium ${newRecipe.targetProfit === percentage
+                              ? "text-emerald-700"
+                              : "text-gray-700"
+                              }`}
                           >
                             {percentage}%
                           </Text>
@@ -655,22 +690,20 @@ export default function Recipes() {
                     </View>
                     <View className="flex-row items-center gap-3">
                       <Pressable
-                        className={`grow py-3 rounded-xl border-2 ${
-                          isCustomProfit
-                            ? "border-emerald-500 bg-emerald-50"
-                            : "border-gray-200 bg-white"
-                        }`}
+                        className={`grow py-3 rounded-xl border-2 ${isCustomProfit
+                          ? "border-emerald-500 bg-emerald-50"
+                          : "border-gray-200 bg-white"
+                          }`}
                         onPress={() => {
                           setIsCustomProfit(true);
                           onFormChange("targetProfit", customProfit);
                         }}
                       >
                         <Text
-                          className={`text-center font-medium ${
-                            isCustomProfit
-                              ? "text-emerald-700"
-                              : "text-gray-700"
-                          }`}
+                          className={`text-center font-medium ${isCustomProfit
+                            ? "text-emerald-700"
+                            : "text-gray-700"
+                            }`}
                         >
                           Custom
                         </Text>
@@ -711,7 +744,7 @@ export default function Recipes() {
                         name="leaf-outline"
                         size={28}
                         color="#9CA3AF"
-                        style={{marginBottom: 8}}
+                        style={{ marginBottom: 8 }}
                       />
                       <Text className="text-center text-gray-500">
                         No ingredients available. Add some to get started.
@@ -726,7 +759,7 @@ export default function Recipes() {
                             name="search"
                             size={16}
                             color="#9CA3AF"
-                            style={{marginRight: 8}}
+                            style={{ marginRight: 8 }}
                           />
                           <TextInput
                             placeholder="Search ingredients..."
@@ -738,7 +771,7 @@ export default function Recipes() {
                         </View>
                       </View>
 
-                      <View style={{maxHeight: 350}}>
+                      <View style={{ maxHeight: 350 }}>
                         <FlatList
                           keyboardShouldPersistTaps="handled"
                           nestedScrollEnabled={true}
@@ -749,7 +782,7 @@ export default function Recipes() {
                               .includes(searchQuery.toLowerCase()),
                           )}
                           keyExtractor={(item) => item.$id}
-                          renderItem={({item: ingredient}) => (
+                          renderItem={({ item: ingredient }) => (
                             <IngredientSelectionCard
                               ingredient={ingredient}
                               selectedIngredients={selectedIngredients}
@@ -785,7 +818,7 @@ export default function Recipes() {
                           name="alert-circle"
                           size={16}
                           color="#DC2626"
-                          style={{marginTop: 2}}
+                          style={{ marginTop: 2 }}
                         />
                         <Text className="flex-1 text-xs text-red-600">
                           {errors.insufficientStock}
@@ -798,7 +831,7 @@ export default function Recipes() {
                 {/* Action Buttons */}
                 <View
                   className="gap-3"
-                  style={{marginBottom: Platform.OS === "ios" ? 20 : 20}}
+                  style={{ marginBottom: Platform.OS === "ios" ? 20 : 20 }}
                 >
                   {isEditing ? (
                     <Pressable
