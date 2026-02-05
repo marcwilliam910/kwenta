@@ -1,10 +1,10 @@
 import IngredientSelectionCard from "@/components/IngredientSelectionCard";
 import RecipeCard from "@/components/RecipeCard";
-import { useIngredients } from "@/context/IngredientsContext";
-import { useRecipes } from "@/context/RecipesContext";
+import {useIngredients} from "@/context/IngredientsContext";
+import {useRecipes} from "@/context/RecipesContext";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import {useFocusEffect} from "expo-router";
+import {useCallback, useMemo, useRef, useState} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -21,8 +21,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { showMessage } from "react-native-flash-message";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {showMessage} from "react-native-flash-message";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 
 // types
 type RecipeInput = {
@@ -42,7 +42,7 @@ type RecipeErrors = {
 
 export function validateRecipe(
   input: RecipeInput,
-  setErrors: (errors: RecipeErrors) => void,
+  setErrors: (errors: RecipeErrors) => void
 ): boolean {
   const errors: RecipeErrors = {};
   let isValid = true;
@@ -99,18 +99,15 @@ const formatAmount = (value: number) => {
   return Number.isInteger(value) ? value.toString() : value.toFixed(2);
 };
 
-const getPackUsage = (requestedQty: number, ingredient: StockIngredient) => {
-  const unit = ingredient.unit?.toLowerCase();
-  if (unit === "piece") return requestedQty;
-  const packSize = ingredient.quantity;
-  if (!packSize || isNaN(packSize) || packSize <= 0) return 0;
-  return requestedQty / packSize;
+const clampStockValue = (value: number) => {
+  if (isNaN(value)) return 0;
+  return Math.max(0, Math.round(value));
 };
 
 export function validateStockAvailability(
   selectedIngredients: Record<string, number>,
   ingredientsList: StockIngredient[],
-  previousIngredients?: Record<string, number>,
+  previousIngredients?: Record<string, number>
 ): StockValidationResult {
   const insufficientItems: {
     name: string;
@@ -119,26 +116,21 @@ export function validateStockAvailability(
     unit: string;
   }[] = [];
 
-  for (const [ingredientId, requestedQty] of Object.entries(selectedIngredients)) {
+  for (const [ingredientId, requestedQty] of Object.entries(
+    selectedIngredients
+  )) {
     const ingredient = ingredientsList.find((ing) => ing.$id === ingredientId);
     if (!ingredient) continue;
 
-    // Calculate effective available stock in packs (current stock + restore from previous recipe)
     const previousQty = previousIngredients?.[ingredientId] || 0;
-    const previousPackUsage = getPackUsage(previousQty, ingredient);
-    const effectiveAvailablePacks = ingredient.stock + previousPackUsage;
-    const requestedPackUsage = getPackUsage(requestedQty, ingredient);
     const unit = ingredient.unit || "";
-    const availableAmount =
-      unit.toLowerCase() === "piece"
-        ? effectiveAvailablePacks
-        : effectiveAvailablePacks * ingredient.quantity;
+    const effectiveAvailable = ingredient.stock + previousQty;
 
-    if (requestedPackUsage > effectiveAvailablePacks) {
+    if (requestedQty > effectiveAvailable) {
       insufficientItems.push({
         name: ingredient.name,
         requested: requestedQty,
-        available: availableAmount,
+        available: effectiveAvailable,
         unit,
       });
     }
@@ -159,7 +151,7 @@ export default function Recipes() {
     editRecipe,
     initialFetchRecipes,
   } = useRecipes();
-  const { ingredients, editIngredient: updateIngredientStock } = useIngredients();
+  const {ingredients, editIngredient: updateIngredientStock} = useIngredients();
   const [isCustomProfit, setIsCustomProfit] = useState(false);
   const [customProfit, setCustomProfit] = useState("");
   const insets = useSafeAreaInsets();
@@ -173,7 +165,7 @@ export default function Recipes() {
   const [selectedIngredients, setSelectedIngredients] = useState<{
     [id: string]: string;
   }>({});
-  const { height } = useWindowDimensions();
+  const {height} = useWindowDimensions();
   const usableHeight = height - insets.top - insets.bottom;
 
   // Modal state
@@ -187,14 +179,14 @@ export default function Recipes() {
   // Sort recipes by creation date (most recent first)
   const sortedRecipes = useMemo(() => {
     return [...recipes].sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
     );
   }, [recipes]);
 
   // toggle selection
   const toggleIngredient = (id: string) => {
     setSelectedIngredients((prev) => {
-      const copy = { ...prev };
+      const copy = {...prev};
       if (copy[id] !== undefined) {
         delete copy[id]; // deselect
       } else {
@@ -204,7 +196,7 @@ export default function Recipes() {
     });
     // Clear insufficient stock error when ingredients change
     if (errors.insufficientStock) {
-      setErrors((prev) => ({ ...prev, insufficientStock: undefined }));
+      setErrors((prev) => ({...prev, insufficientStock: undefined}));
     }
   };
 
@@ -216,7 +208,7 @@ export default function Recipes() {
     }));
     // Clear insufficient stock error when quantity changes
     if (errors.insufficientStock) {
-      setErrors((prev) => ({ ...prev, insufficientStock: undefined }));
+      setErrors((prev) => ({...prev, insufficientStock: undefined}));
     }
   };
 
@@ -233,7 +225,7 @@ export default function Recipes() {
   }, []);
 
   const cleanInputFields = () => {
-    setNewRecipe({ name: "", servings: "", targetProfit: "" });
+    setNewRecipe({name: "", servings: "", targetProfit: ""});
     setIsCustomProfit(false);
     setCustomProfit("");
     setSelectedIngredients({});
@@ -248,7 +240,7 @@ export default function Recipes() {
       Object.entries(selectedIngredients).map(([key, value]) => [
         key,
         Number(value),
-      ]),
+      ])
     );
 
     const input: RecipeInput = {
@@ -265,14 +257,14 @@ export default function Recipes() {
     // Validate stock availability
     const stockValidation = validateStockAvailability(
       numericIngredients,
-      ingredients,
+      ingredients
     );
 
     if (!stockValidation.isValid) {
       const errorMessages = stockValidation.insufficientItems
         .map(
           (item) =>
-            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`,
+            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`
         )
         .join("\n");
       setErrors((prev) => ({
@@ -293,13 +285,14 @@ export default function Recipes() {
       if (res.$id) {
         // Deduct stock from each ingredient used
         for (const [ingredientId, usedQty] of Object.entries(
-          numericIngredients,
+          numericIngredients
         )) {
-          const ingredient = ingredients.find((ing) => ing.$id === ingredientId);
+          const ingredient = ingredients.find(
+            (ing) => ing.$id === ingredientId
+          );
           if (ingredient) {
-            const packUsage = getPackUsage(usedQty, ingredient);
-            const newStock = ingredient.stock - packUsage;
-            await updateIngredientStock(ingredientId, { stock: newStock });
+            const newStock = clampStockValue(ingredient.stock - usedQty);
+            await updateIngredientStock(ingredientId, {stock: newStock});
           }
         }
 
@@ -345,9 +338,9 @@ export default function Recipes() {
       "Delete Recipe",
       "Are you sure you want to delete this recipe? This action cannot be undone.",
       [
-        { text: "Cancel", style: "cancel" },
-        { text: "Delete", style: "destructive", onPress: confirmDelete },
-      ],
+        {text: "Cancel", style: "cancel"},
+        {text: "Delete", style: "destructive", onPress: confirmDelete},
+      ]
     );
   };
 
@@ -357,7 +350,7 @@ export default function Recipes() {
       Object.entries(selectedIngredients).map(([key, value]) => [
         key,
         Number(value),
-      ]),
+      ])
     );
 
     const input: RecipeInput = {
@@ -379,14 +372,14 @@ export default function Recipes() {
     const stockValidation = validateStockAvailability(
       numericIngredients,
       ingredients,
-      originalIngredients,
+      originalIngredients
     );
 
     if (!stockValidation.isValid) {
       const errorMessages = stockValidation.insufficientItems
         .map(
           (item) =>
-            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`,
+            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`
         )
         .join("\n");
       setErrors((prev) => ({
@@ -418,14 +411,12 @@ export default function Recipes() {
 
         const oldQty = originalIngredients[ingredientId] || 0;
         const newQty = numericIngredients[ingredientId] || 0;
-        const oldPackUsage = getPackUsage(oldQty, ingredient);
-        const newPackUsage = getPackUsage(newQty, ingredient);
-        const difference = newPackUsage - oldPackUsage;
+        const difference = newQty - oldQty;
 
         if (difference !== 0) {
           // If difference > 0, we need more (deduct). If difference < 0, we used less (restore).
-          const newStock = ingredient.stock - difference;
-          await updateIngredientStock(ingredientId, { stock: newStock });
+          const newStock = clampStockValue(ingredient.stock - difference);
+          await updateIngredientStock(ingredientId, {stock: newStock});
         }
       }
 
@@ -463,40 +454,40 @@ export default function Recipes() {
         Object.entries(editingRecipe.ingredients).map(([key, value]) => [
           key,
           value.toString(),
-        ]),
-      ),
+        ])
+      )
     );
     handleOpenSheet();
   };
 
   const onFormChange = (field: string, value: string) => {
-    setNewRecipe((prev) => ({ ...prev, [field]: value }));
+    setNewRecipe((prev) => ({...prev, [field]: value}));
   };
 
   useFocusEffect(
     useCallback(() => {
       cleanInputFields();
       setIsModalVisible(false);
-    }, []),
+    }, [])
   );
 
   if (loading) {
     return (
-      <View className="items-center justify-center">
+      <View className="justify-center items-center">
         <ActivityIndicator size="large" color={"#3B82F6"} />
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{flex: 1}}>
       {recipes.length === 0 ? (
         <View
-          className="items-center justify-center px-8"
-          style={{ height: usableHeight - 100 }}
+          className="justify-center items-center px-8"
+          style={{height: usableHeight - 100}}
         >
           {/* Icon Container */}
-          <View className="items-center justify-center w-24 h-24 mb-6 bg-gray-100 rounded-full">
+          <View className="justify-center items-center mb-6 w-24 h-24 bg-gray-100 rounded-full">
             <Ionicons name="restaurant-outline" size={48} color="#9CA3AF" />
           </View>
           {/* Main Message */}
@@ -518,9 +509,9 @@ export default function Recipes() {
             </Text>
           </Pressable>
           {/* Enhanced Tips Section */}
-          <View className="w-full p-4 mt-8 border rounded-lg bg-amber-50 border-amber-200">
-            <View className="flex-row items-start gap-3">
-              <View className="items-center justify-center w-8 h-8 rounded-full bg-amber-200">
+          <View className="p-4 mt-8 w-full bg-amber-50 rounded-lg border border-amber-200">
+            <View className="flex-row gap-3 items-start">
+              <View className="justify-center items-center w-8 h-8 bg-amber-200 rounded-full">
                 <Ionicons name="bulb-outline" size={16} color="#D97706" />
               </View>
               <View className="flex-1">
@@ -536,13 +527,13 @@ export default function Recipes() {
           </View>
         </View>
       ) : (
-        <View style={{ flex: 1 }}>
+        <View style={{flex: 1}}>
           {/* Header with Add Button */}
-          <View className="flex-row items-center justify-between p-4">
+          <View className="flex-row justify-between items-center p-4">
             <Text className="text-xl font-bold text-gray-900">My Recipes</Text>
             <Pressable
               onPress={handleOpenSheet}
-              className="p-3 rounded-full bg-emerald-500 active:bg-emerald-600"
+              className="p-3 bg-emerald-500 rounded-full active:bg-emerald-600"
             >
               <Ionicons name="restaurant" size={20} color="white" />
             </Pressable>
@@ -560,7 +551,7 @@ export default function Recipes() {
               />
             }
             data={sortedRecipes}
-            renderItem={({ item }) => (
+            renderItem={({item}) => (
               <RecipeCard
                 recipe={item}
                 className="bg-white"
@@ -604,7 +595,7 @@ export default function Recipes() {
               nestedScrollEnabled={true}
             >
               {/* Sheet Header */}
-              <View className="flex-row items-center justify-between pb-4 pr-4">
+              <View className="flex-row justify-between items-center pr-4 pb-4">
                 <Text className="text-xl font-semibold text-gray-900">
                   {isEditing ? "Edit Recipe" : "Add Recipe"}
                 </Text>
@@ -625,7 +616,7 @@ export default function Recipes() {
                     value={newRecipe.name}
                     onChangeText={(text) => onFormChange("name", text)}
                     placeholder="Enter recipe name"
-                    className="p-4 text-gray-900 border border-gray-200 bg-gray-50 rounded-xl"
+                    className="p-4 text-gray-900 bg-gray-50 rounded-xl border border-gray-200"
                     placeholderTextColor="#9ca3af"
                   />
                   {errors.name && (
@@ -647,7 +638,7 @@ export default function Recipes() {
                     spellCheck={false}
                     autoComplete="off"
                     autoCorrect={false}
-                    className="p-4 text-gray-900 border border-gray-200 bg-gray-50 rounded-xl"
+                    className="p-4 text-gray-900 bg-gray-50 rounded-xl border border-gray-200"
                     placeholderTextColor="#9ca3af"
                   />
                   {errors.servings && (
@@ -659,7 +650,7 @@ export default function Recipes() {
 
                 {/* Profit Margin */}
                 <View className="gap-2">
-                  <Text className="text-sm font-medium text-gray-700 ">
+                  <Text className="text-sm font-medium text-gray-700">
                     Target Profit Margin (%)
                   </Text>
                   <View className="gap-2">
@@ -671,39 +662,43 @@ export default function Recipes() {
                             onFormChange("targetProfit", percentage);
                             setIsCustomProfit(false);
                           }}
-                          className={`flex-1 py-3 rounded-xl border-2 ${newRecipe.targetProfit === percentage
-                            ? "border-emerald-500 bg-emerald-50"
-                            : "border-gray-200 bg-white"
-                            }`}
+                          className={`flex-1 py-3 rounded-xl border-2 ${
+                            newRecipe.targetProfit === percentage
+                              ? "border-emerald-500 bg-emerald-50"
+                              : "border-gray-200 bg-white"
+                          }`}
                           activeOpacity={0.8}
                         >
                           <Text
-                            className={`text-center font-medium ${newRecipe.targetProfit === percentage
-                              ? "text-emerald-700"
-                              : "text-gray-700"
-                              }`}
+                            className={`text-center font-medium ${
+                              newRecipe.targetProfit === percentage
+                                ? "text-emerald-700"
+                                : "text-gray-700"
+                            }`}
                           >
                             {percentage}%
                           </Text>
                         </TouchableOpacity>
                       ))}
                     </View>
-                    <View className="flex-row items-center gap-3">
+                    <View className="flex-row gap-3 items-center">
                       <Pressable
-                        className={`grow py-3 rounded-xl border-2 ${isCustomProfit
-                          ? "border-emerald-500 bg-emerald-50"
-                          : "border-gray-200 bg-white"
-                          }`}
+                        className={`grow py-3 rounded-xl border-2 ${
+                          isCustomProfit
+                            ? "bg-emerald-50 border-emerald-500"
+                            : "bg-white border-gray-200"
+                        }`}
                         onPress={() => {
                           setIsCustomProfit(true);
                           onFormChange("targetProfit", customProfit);
                         }}
                       >
                         <Text
-                          className={`text-center font-medium ${isCustomProfit
-                            ? "text-emerald-700"
-                            : "text-gray-700"
-                            }`}
+                          className={`text-center font-medium ${
+                            isCustomProfit
+                              ? "text-emerald-700"
+                              : "text-gray-700"
+                          }`}
                         >
                           Custom
                         </Text>
@@ -719,7 +714,7 @@ export default function Recipes() {
                             }}
                             placeholder="25%"
                             keyboardType="numeric"
-                            className="w-20 text-center text-gray-900 border border-gray-200 bg-gray-50 rounded-xl"
+                            className="w-20 text-center text-gray-900 bg-gray-50 rounded-xl border border-gray-200"
                             placeholderTextColor="#9ca3af"
                           />
                         </>
@@ -739,12 +734,12 @@ export default function Recipes() {
                     Ingredients
                   </Text>
                   {ingredients.length === 0 ? (
-                    <View className="flex items-center justify-center p-6 bg-gray-50 rounded-xl">
+                    <View className="flex justify-center items-center p-6 bg-gray-50 rounded-xl">
                       <Ionicons
                         name="leaf-outline"
                         size={28}
                         color="#9CA3AF"
-                        style={{ marginBottom: 8 }}
+                        style={{marginBottom: 8}}
                       />
                       <Text className="text-center text-gray-500">
                         No ingredients available. Add some to get started.
@@ -754,12 +749,12 @@ export default function Recipes() {
                     <View className="rounded-xl">
                       {/* Search/Filter Bar */}
                       <View className="p-4 border-b border-gray-200">
-                        <View className="flex-row items-center px-3 border-2 border-gray-200 bg-gray-50 rounded-xl">
+                        <View className="flex-row items-center px-3 bg-gray-50 rounded-xl border-2 border-gray-200">
                           <Ionicons
                             name="search"
                             size={16}
                             color="#9CA3AF"
-                            style={{ marginRight: 8 }}
+                            style={{marginRight: 8}}
                           />
                           <TextInput
                             placeholder="Search ingredients..."
@@ -771,7 +766,7 @@ export default function Recipes() {
                         </View>
                       </View>
 
-                      <View style={{ maxHeight: 350 }}>
+                      <View style={{maxHeight: 350}}>
                         <FlatList
                           keyboardShouldPersistTaps="handled"
                           nestedScrollEnabled={true}
@@ -779,10 +774,10 @@ export default function Recipes() {
                           data={ingredients.filter((ingredient) =>
                             ingredient.name
                               .toLowerCase()
-                              .includes(searchQuery.toLowerCase()),
+                              .includes(searchQuery.toLowerCase())
                           )}
                           keyExtractor={(item) => item.$id}
-                          renderItem={({ item: ingredient }) => (
+                          renderItem={({item: ingredient}) => (
                             <IngredientSelectionCard
                               ingredient={ingredient}
                               selectedIngredients={selectedIngredients}
@@ -794,7 +789,7 @@ export default function Recipes() {
                             paddingVertical: 16,
                           }}
                         />
-                        <View className="p-4 bg-white border-t border-gray-200 rounded-b-xl">
+                        <View className="p-4 bg-white rounded-b-xl border-t border-gray-200">
                           <Text className="text-sm text-center text-gray-600">
                             {Object.keys(selectedIngredients).length} ingredient
                             {Object.keys(selectedIngredients).length === 1
@@ -812,13 +807,13 @@ export default function Recipes() {
                     </Text>
                   )}
                   {errors.insufficientStock && (
-                    <View className="p-3 mt-2 border border-red-200 bg-red-50 rounded-xl">
-                      <View className="flex-row items-start gap-2">
+                    <View className="p-3 mt-2 bg-red-50 rounded-xl border border-red-200">
+                      <View className="flex-row gap-2 items-start">
                         <Ionicons
                           name="alert-circle"
                           size={16}
                           color="#DC2626"
-                          style={{ marginTop: 2 }}
+                          style={{marginTop: 2}}
                         />
                         <Text className="flex-1 text-xs text-red-600">
                           {errors.insufficientStock}
@@ -831,7 +826,7 @@ export default function Recipes() {
                 {/* Action Buttons */}
                 <View
                   className="gap-3"
-                  style={{ marginBottom: Platform.OS === "ios" ? 20 : 20 }}
+                  style={{marginBottom: Platform.OS === "ios" ? 20 : 20}}
                 >
                   {isEditing ? (
                     <Pressable
@@ -864,7 +859,7 @@ export default function Recipes() {
                   )}
                   <Pressable
                     onPress={handleCloseSheet}
-                    className="flex-1 py-4 border border-gray-300 rounded-xl active:bg-gray-100"
+                    className="flex-1 py-4 rounded-xl border border-gray-300 active:bg-gray-100"
                   >
                     <Text className="font-medium text-center text-gray-700">
                       Cancel

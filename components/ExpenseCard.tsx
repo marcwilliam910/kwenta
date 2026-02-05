@@ -1,7 +1,7 @@
-import { AppwriteExpense } from "@/lib/services/expensesSalesSubscriptionService";
-import { Ionicons } from "@expo/vector-icons";
-import { format } from "date-fns";
-import { Pressable, Text, View } from "react-native";
+import {AppwriteExpense} from "@/lib/services/expensesSalesSubscriptionService";
+import {Ionicons} from "@expo/vector-icons";
+import {format} from "date-fns";
+import {Pressable, Text, View} from "react-native";
 
 type ExpenseCardProps = {
   expense: AppwriteExpense;
@@ -11,22 +11,27 @@ type ExpenseCardProps = {
 
 const CATEGORY_CONFIG: Record<
   string,
-  { icon: keyof typeof Ionicons.glyphMap; color: string; bgColor: string }
+  {icon: keyof typeof Ionicons.glyphMap; color: string; bgColor: string}
 > = {
-  electricity: { icon: "flash", color: "#f59e0b", bgColor: "bg-amber-100" },
-  water: { icon: "water", color: "#3b82f6", bgColor: "bg-blue-100" },
-  gas: { icon: "flame", color: "#ef4444", bgColor: "bg-red-100" },
-  rent: { icon: "home", color: "#8b5cf6", bgColor: "bg-purple-100" },
-  supplies: { icon: "cube", color: "#10b981", bgColor: "bg-emerald-100" },
-  other: { icon: "ellipsis-horizontal", color: "#6b7280", bgColor: "bg-gray-100" },
+  electricity: {icon: "flash", color: "#f59e0b", bgColor: "bg-amber-100"},
+  water: {icon: "water", color: "#3b82f6", bgColor: "bg-blue-100"},
+  gas: {icon: "flame", color: "#ef4444", bgColor: "bg-red-100"},
+  rent: {icon: "home", color: "#8b5cf6", bgColor: "bg-purple-100"},
+  supplies: {icon: "cube", color: "#fbbf24", bgColor: "bg-amber-100"}, // amber (yellow)
+  salaries: {icon: "cash", color: "#475569", bgColor: "bg-gray-200"}, // gray
+  maintenance: {icon: "hammer", color: "#f43f5e", bgColor: "bg-pink-100"}, // pink
+  marketing: {icon: "megaphone", color: "#a21caf", bgColor: "bg-purple-100"}, // purple
+  internet: {icon: "wifi", color: "#06b6d4", bgColor: "bg-sky-100"}, // sky
+  transportation: {icon: "car", color: "#f59e42", bgColor: "bg-orange-100"}, // orange
+  otherUtilities: {icon: "water", color: "#172554", bgColor: "bg-blue-100"}, // blue
 };
 
-const ExpenseCard = ({ expense, handleDelete, handleEdit }: ExpenseCardProps) => {
+const ExpenseCard = ({expense, handleDelete, handleEdit}: ExpenseCardProps) => {
   const category = expense.category.toLowerCase();
   const config = CATEGORY_CONFIG[category] || CATEGORY_CONFIG.other;
 
   return (
-    <View className="flex-row items-center p-4 mb-3 bg-white border border-gray-100 shadow-sm rounded-2xl">
+    <View className="flex-row items-center p-4 mb-1 bg-white border border-gray-100 shadow-sm rounded-2xl">
       {/* Category Icon */}
       <View
         className={`items-center justify-center w-12 h-12 mr-4 rounded-full ${config.bgColor}`}

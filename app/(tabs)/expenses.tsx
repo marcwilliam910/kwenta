@@ -1,16 +1,16 @@
 import ExpenseCard from "@/components/ExpenseCard";
 import SaleCard from "@/components/SaleCard";
-import { useExpensesSales } from "@/context/ExpensesSalesContext";
-import { useIngredients } from "@/context/IngredientsContext";
-import { useRecipes } from "@/context/RecipesContext";
+import {useExpensesSales} from "@/context/ExpensesSalesContext";
+import {useIngredients} from "@/context/IngredientsContext";
+import {useRecipes} from "@/context/RecipesContext";
 import {
   AppwriteExpense,
   AppwriteSale,
 } from "@/lib/services/expensesSalesSubscriptionService";
 import Ionicons from "@expo/vector-icons/Ionicons";
-import { Picker } from "@react-native-picker/picker";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useMemo, useRef, useState } from "react";
+import {Picker} from "@react-native-picker/picker";
+import {useFocusEffect} from "expo-router";
+import {useCallback, useMemo, useRef, useState} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -26,8 +26,8 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
-import { showMessage } from "react-native-flash-message";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {showMessage} from "react-native-flash-message";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 
 const EXPENSE_CATEGORIES = [
   "Electricity",
@@ -60,7 +60,7 @@ const MONTH_NAMES = [
 
 export default function Expenses() {
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const {height} = useWindowDimensions();
   const usableHeight = height - insets.top - insets.bottom;
 
   const {
@@ -83,8 +83,8 @@ export default function Expenses() {
     initialFetch,
   } = useExpensesSales();
 
-  const { recipes } = useRecipes();
-  const { ingredients } = useIngredients();
+  const {recipes} = useRecipes();
+  const {ingredients} = useIngredients();
 
   // Modal states
   const [isExpenseModalVisible, setIsExpenseModalVisible] = useState(false);
@@ -106,10 +106,8 @@ export default function Expenses() {
   const [saleForm, setSaleForm] = useState({
     recipeId: "",
     quantity: "",
-    pricePerUnit: "",
   });
   const [editingSale, setEditingSale] = useState<AppwriteSale | null>(null);
-  const [targetProfit, setTargetProfit] = useState("");
 
   const amountInputRef = useRef<any>(null);
   const descInputRef = useRef<any>(null);
@@ -126,7 +124,9 @@ export default function Expenses() {
     const recipeIngredients = selectedRecipe.ingredients || {};
     let totalCost = 0;
 
-    for (const [ingredientId, requiredQty] of Object.entries(recipeIngredients)) {
+    for (const [ingredientId, requiredQty] of Object.entries(
+      recipeIngredients
+    )) {
       const ingredient = ingredients.find((ing) => ing.$id === ingredientId);
       if (ingredient) {
         const perItemQty = Number(ingredient.quantity) || 0;
@@ -139,43 +139,27 @@ export default function Expenses() {
 
     const servings = selectedRecipe.servings || 1;
     const costPerServing = totalCost / servings;
+    const targetMargin = selectedRecipe.targetProfit || 0;
+    const sellingPrice = costPerServing * (1 + targetMargin / 100);
 
     return {
       totalCost,
       costPerServing,
+      sellingPrice,
+      targetMargin,
       servings,
     };
   }, [selectedRecipe, ingredients]);
 
-  // Calculate suggested quantity for net profit
-  const suggestedQuantity = useMemo(() => {
-    if (!recipeCostData || !saleForm.pricePerUnit || !targetProfit) return null;
-
-    const price = Number(saleForm.pricePerUnit);
-    const target = Number(targetProfit);
-    const costPerUnit = recipeCostData.costPerServing;
-    const profitPerUnit = price - costPerUnit;
-
-    if (profitPerUnit <= 0) return null;
-
-    // Net Profit = (Sales Revenue) - (Recipe Cost) - (Total Expenses)
-    // Target = (Qty * Price) - (Qty * CostPerUnit) - TotalExpenses
-    // Target + TotalExpenses = Qty * (Price - CostPerUnit)
-    // Qty = (Target + TotalExpenses) / (Price - CostPerUnit)
-    const suggested = Math.ceil((target + totalExpenses) / profitPerUnit);
-    return suggested > 0 ? suggested : 1;
-  }, [recipeCostData, saleForm.pricePerUnit, targetProfit, totalExpenses]);
-
   // Clean up form on modal close
   const cleanExpenseForm = () => {
-    setExpenseForm({ category: "", amount: "", description: "" });
+    setExpenseForm({category: "", amount: "", description: ""});
     setEditingExpense(null);
   };
 
   const cleanSaleForm = () => {
-    setSaleForm({ recipeId: "", quantity: "", pricePerUnit: "" });
+    setSaleForm({recipeId: "", quantity: ""});
     setEditingSale(null);
-    setTargetProfit("");
   };
 
   useFocusEffect(
@@ -274,7 +258,7 @@ export default function Expenses() {
       "Delete Expense",
       "Are you sure you want to delete this expense?",
       [
-        { text: "Cancel", style: "cancel" },
+        {text: "Cancel", style: "cancel"},
         {
           text: "Delete",
           style: "destructive",
@@ -307,7 +291,6 @@ export default function Expenses() {
       setSaleForm({
         recipeId: sale.recipeId,
         quantity: sale.quantitySold.toString(),
-        pricePerUnit: sale.pricePerUnit.toString(),
       });
     }
     setIsSaleModalVisible(true);
@@ -320,17 +303,25 @@ export default function Expenses() {
   };
 
   const handleSaveSale = async () => {
-    if (!saleForm.recipeId || !saleForm.quantity || !saleForm.pricePerUnit) {
+    if (!saleForm.recipeId || !saleForm.quantity) {
       showMessage({
         message: "Validation Error",
-        description: "Please fill in all fields.",
+        description: "Please select a recipe and enter quantity.",
+        type: "warning",
+      });
+      return;
+    }
+
+    if (!recipeCostData) {
+      showMessage({
+        message: "Validation Error",
+        description: "Could not calculate recipe cost. Please try again.",
         type: "warning",
       });
       return;
     }
 
     const quantity = Number(saleForm.quantity);
-    const pricePerUnit = Number(saleForm.pricePerUnit);
 
     if (isNaN(quantity) || quantity <= 0) {
       showMessage({
@@ -341,29 +332,21 @@ export default function Expenses() {
       return;
     }
 
-    if (isNaN(pricePerUnit) || pricePerUnit <= 0) {
-      showMessage({
-        message: "Validation Error",
-        description: "Price must be a positive number.",
-        type: "warning",
-      });
-      return;
-    }
-
     try {
       setIsSubmitting(true);
       const now = new Date();
       const recipe = recipes.find((r) => r.$id === saleForm.recipeId);
-      const costPerUnit = recipeCostData?.costPerServing || 0;
-      const totalRevenue = quantity * pricePerUnit;
-      const totalCost = quantity * costPerUnit;
+      const pricePerUnit = recipeCostData.sellingPrice;
+      const costPerUnit = recipeCostData.costPerServing;
+      const totalRevenue = Math.round(quantity * pricePerUnit);
+      const totalCost = Math.round(quantity * costPerUnit);
 
       if (editingSale) {
         await editSale(editingSale.$id, {
           recipeId: saleForm.recipeId,
           recipeName: recipe?.name || "Unknown Recipe",
           quantitySold: quantity,
-          pricePerUnit,
+          pricePerUnit: Math.round(pricePerUnit),
           totalRevenue,
           totalCost,
         });
@@ -377,7 +360,7 @@ export default function Expenses() {
           recipeId: saleForm.recipeId,
           recipeName: recipe?.name || "Unknown Recipe",
           quantitySold: quantity,
-          pricePerUnit,
+          pricePerUnit: Math.round(pricePerUnit),
           totalRevenue,
           totalCost,
           month: now.getMonth() + 1,
@@ -404,7 +387,7 @@ export default function Expenses() {
 
   const handleDeleteSale = (sale: AppwriteSale) => {
     Alert.alert("Delete Sale", "Are you sure you want to delete this sale?", [
-      { text: "Cancel", style: "cancel" },
+      {text: "Cancel", style: "cancel"},
       {
         text: "Delete",
         style: "destructive",
@@ -439,7 +422,7 @@ export default function Expenses() {
     return (
       <View
         className="items-center justify-center"
-        style={{ height: usableHeight - 100 }}
+        style={{height: usableHeight - 100}}
       >
         <ActivityIndicator size="large" color="#3B82F6" />
       </View>
@@ -447,7 +430,7 @@ export default function Expenses() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{flex: 1}}>
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
@@ -520,8 +503,9 @@ export default function Expenses() {
                   color={netProfit >= 0 ? "#10b981" : "#ef4444"}
                 />
                 <Text
-                  className={`text-xl font-bold ${netProfit >= 0 ? "text-emerald-600" : "text-red-600"
-                    }`}
+                  className={`text-xl font-bold ${
+                    netProfit >= 0 ? "text-emerald-600" : "text-red-600"
+                  }`}
                 >
                   {netProfit >= 0 ? "+" : ""}₱{netProfit.toFixed(2)}
                 </Text>
@@ -533,7 +517,9 @@ export default function Expenses() {
         {/* Expenses Section */}
         <View className="mb-6">
           <View className="flex-row items-center justify-between mb-3">
-            <Text className="text-lg font-semibold text-gray-800">Expenses</Text>
+            <Text className="text-lg font-semibold text-gray-800">
+              Expenses
+            </Text>
             {isCurrentMonth && (
               <Pressable
                 onPress={() => handleOpenExpenseModal()}
@@ -632,7 +618,10 @@ export default function Expenses() {
                 <Text className="text-xl font-semibold text-gray-900">
                   {editingExpense ? "Edit Expense" : "Add Expense"}
                 </Text>
-                <Pressable onPress={handleCloseExpenseModal} className="p-2 -mr-2">
+                <Pressable
+                  onPress={handleCloseExpenseModal}
+                  className="p-2 -mr-2"
+                >
                   <Ionicons name="close" size={24} color="#6b7280" />
                 </Pressable>
               </View>
@@ -647,9 +636,9 @@ export default function Expenses() {
                     <Picker
                       selectedValue={expenseForm.category}
                       onValueChange={(value) =>
-                        setExpenseForm((prev) => ({ ...prev, category: value }))
+                        setExpenseForm((prev) => ({...prev, category: value}))
                       }
-                      style={{ height: 55, color: "#374151" }}
+                      style={{height: 55, color: "#374151"}}
                     >
                       <Picker.Item
                         label="Select Category"
@@ -673,7 +662,7 @@ export default function Expenses() {
                     value={expenseForm.amount}
                     onChangeText={(text) => {
                       text = text.replace(/[^0-9.]/g, "");
-                      setExpenseForm((prev) => ({ ...prev, amount: text }));
+                      setExpenseForm((prev) => ({...prev, amount: text}));
                     }}
                     placeholder="0.00"
                     keyboardType="numeric"
@@ -691,7 +680,7 @@ export default function Expenses() {
                     ref={descInputRef}
                     value={expenseForm.description}
                     onChangeText={(text) =>
-                      setExpenseForm((prev) => ({ ...prev, description: text }))
+                      setExpenseForm((prev) => ({...prev, description: text}))
                     }
                     placeholder="Add a note..."
                     className="p-4 text-gray-900 border border-gray-200 bg-gray-50 rounded-xl"
@@ -702,7 +691,7 @@ export default function Expenses() {
                 {/* Buttons */}
                 <View
                   className="gap-3"
-                  style={{ marginBottom: Platform.OS === "ios" ? 20 : 20 }}
+                  style={{marginBottom: Platform.OS === "ios" ? 20 : 20}}
                 >
                   <Pressable
                     onPress={handleSaveExpense}
@@ -776,9 +765,9 @@ export default function Expenses() {
                     <Picker
                       selectedValue={saleForm.recipeId}
                       onValueChange={(value) =>
-                        setSaleForm((prev) => ({ ...prev, recipeId: value }))
+                        setSaleForm((prev) => ({...prev, recipeId: value}))
                       }
-                      style={{ height: 55, color: "#374151" }}
+                      style={{height: 55, color: "#374151"}}
                     >
                       <Picker.Item
                         label="Select Recipe"
@@ -795,82 +784,36 @@ export default function Expenses() {
                     </Picker>
                   </View>
 
-                  {/* Recipe Cost Info */}
+                  {/* Recipe Pricing Info */}
                   {recipeCostData && (
                     <View className="p-3 bg-blue-50 rounded-xl">
-                      <Text className="text-xs text-blue-600">
-                        Cost per serving: ₱{recipeCostData.costPerServing.toFixed(2)}
-                      </Text>
+                      <View className="flex-row justify-between mb-1">
+                        <Text className="text-xs text-blue-600">
+                          Cost per serving:
+                        </Text>
+                        <Text className="text-xs font-medium text-blue-700">
+                          ₱{recipeCostData.costPerServing.toFixed(2)}
+                        </Text>
+                      </View>
+                      <View className="flex-row justify-between mb-1">
+                        <Text className="text-xs text-blue-600">
+                          Target margin:
+                        </Text>
+                        <Text className="text-xs font-medium text-blue-700">
+                          {recipeCostData.targetMargin}%
+                        </Text>
+                      </View>
+                      <View className="flex-row justify-between pt-1 border-t border-blue-200">
+                        <Text className="text-xs font-semibold text-blue-700">
+                          Selling price:
+                        </Text>
+                        <Text className="text-xs font-bold text-blue-800">
+                          ₱{recipeCostData.sellingPrice.toFixed(2)}
+                        </Text>
+                      </View>
                     </View>
                   )}
                 </View>
-
-                {/* Price Per Unit */}
-                <View className="gap-2">
-                  <Text className="text-sm font-medium text-gray-700">
-                    Selling Price per Unit (₱)
-                  </Text>
-                  <TextInput
-                    value={saleForm.pricePerUnit}
-                    onChangeText={(text) => {
-                      text = text.replace(/[^0-9.]/g, "");
-                      setSaleForm((prev) => ({ ...prev, pricePerUnit: text }));
-                    }}
-                    placeholder="0.00"
-                    keyboardType="numeric"
-                    className="p-4 text-gray-900 border border-gray-200 bg-gray-50 rounded-xl"
-                    placeholderTextColor="#9ca3af"
-                  />
-                </View>
-
-                {/* Profit Calculator */}
-                {!editingSale && recipeCostData && saleForm.pricePerUnit && (
-                  <View className="p-4 border border-emerald-200 bg-emerald-50 rounded-xl">
-                    <Text className="mb-2 text-sm font-semibold text-emerald-800">
-                      Profit Calculator
-                    </Text>
-                    <Text className="mb-2 text-xs text-emerald-700">
-                      Enter your target net profit to see how many units you need
-                      to sell (considering current expenses of ₱
-                      {totalExpenses.toFixed(2)})
-                    </Text>
-                    <View className="flex-row items-center gap-2">
-                      <Text className="text-sm text-emerald-700">Target:</Text>
-                      <TextInput
-                        value={targetProfit}
-                        onChangeText={(text) => {
-                          text = text.replace(/[^0-9.]/g, "");
-                          setTargetProfit(text);
-                        }}
-                        placeholder="₱0.00"
-                        keyboardType="numeric"
-                        className="flex-1 p-2 text-sm bg-white border border-emerald-300 rounded-lg"
-                        placeholderTextColor="#9ca3af"
-                      />
-                    </View>
-                    {suggestedQuantity && (
-                      <View className="flex-row items-center justify-between mt-3 pt-3 border-t border-emerald-200">
-                        <Text className="text-sm text-emerald-700">
-                          Suggested quantity:
-                        </Text>
-                        <Pressable
-                          onPress={() =>
-                            setSaleForm((prev) => ({
-                              ...prev,
-                              quantity: suggestedQuantity.toString(),
-                            }))
-                          }
-                          className="flex-row items-center gap-1 px-3 py-1 bg-emerald-100 rounded-full"
-                        >
-                          <Text className="text-base font-bold text-emerald-700">
-                            {suggestedQuantity} units
-                          </Text>
-                          <Ionicons name="arrow-forward" size={14} color="#047857" />
-                        </Pressable>
-                      </View>
-                    )}
-                  </View>
-                )}
 
                 {/* Quantity */}
                 <View className="gap-2">
@@ -881,7 +824,7 @@ export default function Expenses() {
                     value={saleForm.quantity}
                     onChangeText={(text) => {
                       text = text.replace(/[^0-9]/g, "");
-                      setSaleForm((prev) => ({ ...prev, quantity: text }));
+                      setSaleForm((prev) => ({...prev, quantity: text}));
                     }}
                     placeholder="0"
                     keyboardType="numeric"
@@ -891,7 +834,7 @@ export default function Expenses() {
                 </View>
 
                 {/* Sale Preview */}
-                {saleForm.quantity && saleForm.pricePerUnit && recipeCostData && (
+                {saleForm.quantity && recipeCostData && (
                   <View className="p-4 bg-gray-50 rounded-xl">
                     <Text className="mb-2 text-sm font-semibold text-gray-700">
                       Sale Preview
@@ -901,7 +844,8 @@ export default function Expenses() {
                       <Text className="text-sm font-medium text-emerald-600">
                         ₱
                         {(
-                          Number(saleForm.quantity) * Number(saleForm.pricePerUnit)
+                          Number(saleForm.quantity) *
+                          recipeCostData.sellingPrice
                         ).toFixed(2)}
                       </Text>
                     </View>
@@ -910,7 +854,8 @@ export default function Expenses() {
                       <Text className="text-sm font-medium text-red-500">
                         ₱
                         {(
-                          Number(saleForm.quantity) * recipeCostData.costPerServing
+                          Number(saleForm.quantity) *
+                          recipeCostData.costPerServing
                         ).toFixed(2)}
                       </Text>
                     </View>
@@ -919,18 +864,19 @@ export default function Expenses() {
                         Profit:
                       </Text>
                       <Text
-                        className={`text-sm font-bold ${Number(saleForm.quantity) *
-                          (Number(saleForm.pricePerUnit) -
-                            recipeCostData.costPerServing) >=
+                        className={`text-sm font-bold ${
+                          Number(saleForm.quantity) *
+                            (recipeCostData.sellingPrice -
+                              recipeCostData.costPerServing) >=
                           0
-                          ? "text-emerald-600"
-                          : "text-red-600"
-                          }`}
+                            ? "text-emerald-600"
+                            : "text-red-600"
+                        }`}
                       >
                         ₱
                         {(
                           Number(saleForm.quantity) *
-                          (Number(saleForm.pricePerUnit) -
+                          (recipeCostData.sellingPrice -
                             recipeCostData.costPerServing)
                         ).toFixed(2)}
                       </Text>
@@ -941,7 +887,7 @@ export default function Expenses() {
                 {/* Buttons */}
                 <View
                   className="gap-3"
-                  style={{ marginBottom: Platform.OS === "ios" ? 20 : 20 }}
+                  style={{marginBottom: Platform.OS === "ios" ? 20 : 20}}
                 >
                   <Pressable
                     onPress={handleSaveSale}
@@ -1010,7 +956,7 @@ export default function Expenses() {
               <FlatList
                 data={availableMonths}
                 keyExtractor={(item) => `${item.year}-${item.month}`}
-                renderItem={({ item }) => {
+                renderItem={({item}) => {
                   const isSelected =
                     item.month === selectedMonth.month &&
                     item.year === selectedMonth.year;
@@ -1024,15 +970,17 @@ export default function Expenses() {
                         setSelectedMonth(item);
                         setIsHistoryModalVisible(false);
                       }}
-                      className={`flex-row items-center justify-between p-4 mb-2 rounded-xl ${isSelected
-                        ? "bg-emerald-50 border-2 border-emerald-500"
-                        : "bg-gray-50"
-                        }`}
+                      className={`flex-row items-center justify-between p-4 mb-2 rounded-xl ${
+                        isSelected
+                          ? "bg-emerald-50 border-2 border-emerald-500"
+                          : "bg-gray-50"
+                      }`}
                     >
                       <View className="flex-row items-center gap-3">
                         <View
-                          className={`w-10 h-10 items-center justify-center rounded-full ${isSelected ? "bg-emerald-500" : "bg-gray-200"
-                            }`}
+                          className={`w-10 h-10 items-center justify-center rounded-full ${
+                            isSelected ? "bg-emerald-500" : "bg-gray-200"
+                          }`}
                         >
                           <Ionicons
                             name="calendar"
@@ -1042,8 +990,9 @@ export default function Expenses() {
                         </View>
                         <View>
                           <Text
-                            className={`text-base font-semibold ${isSelected ? "text-emerald-700" : "text-gray-900"
-                              }`}
+                            className={`text-base font-semibold ${
+                              isSelected ? "text-emerald-700" : "text-gray-900"
+                            }`}
                           >
                             {MONTH_NAMES[item.month - 1]} {item.year}
                           </Text>

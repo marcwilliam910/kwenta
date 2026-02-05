@@ -1,5 +1,6 @@
 import RecipeCardSkeleton from "@/components/skeletons/recipeCardSkeleton";
 import {useAuth} from "@/context/AuthContext";
+import {useExpensesSales} from "@/context/ExpensesSalesContext";
 import {useIngredients} from "@/context/IngredientsContext";
 import {AppwriteRecipe, useRecipes} from "@/context/RecipesContext";
 import Ionicons from "@expo/vector-icons/Ionicons";
@@ -10,15 +11,41 @@ import {useSafeAreaInsets} from "react-native-safe-area-context";
 import useRecipeCost from "../hooks/useRecipe";
 import {AppwriteIngredient} from "./inventory";
 
+const MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December",
+];
+
 export default function Dashboard() {
   const {user} = useAuth();
   const insets = useSafeAreaInsets();
 
   const {recipes} = useRecipes();
   const {ingredients} = useIngredients();
+  const {
+    totalExpenses,
+    totalSalesRevenue,
+    totalSalesCost,
+    netProfit,
+    currentMonthSales,
+    currentMonthExpenses,
+    selectedMonth,
+  } = useExpensesSales();
 
   const ingredientCount = ingredients.length || 0;
   const recipeCount = recipes.length || 0;
+  const salesCount = currentMonthSales.length || 0;
+  const expensesCount = currentMonthExpenses.length || 0;
 
   const expiringIngredients = ingredients.filter((ing) => {
     const today = new Date();
@@ -118,6 +145,89 @@ export default function Dashboard() {
           </Pressable>
         </View>
 
+        {/* Financial Summary */}
+        <Pressable
+          className="p-4 bg-white rounded-2xl active:border active:border-emerald-300"
+          onPress={() => router.push("/expenses")}
+        >
+          <View className="flex-row items-center justify-between mb-4">
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="stats-chart" size={20} color="#6366f1" />
+              <Text className="text-base font-semibold text-gray-800">
+                Financial Summary
+              </Text>
+            </View>
+            <View className="px-2 py-1 rounded-full bg-indigo-50">
+              <Text className="text-xs font-medium text-indigo-600">
+                {MONTH_NAMES[selectedMonth.month - 1]} {selectedMonth.year}
+              </Text>
+            </View>
+          </View>
+
+          {/* Net Profit Highlight */}
+          <View
+            className={`p-4 mb-4 rounded-xl ${netProfit >= 0 ? "bg-emerald-50" : "bg-red-50"}`}
+          >
+            <Text
+              className={`text-sm ${netProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}
+            >
+              Net Profit
+            </Text>
+            <Text
+              className={`text-3xl font-bold ${netProfit >= 0 ? "text-emerald-700" : "text-red-700"}`}
+            >
+              ₱{netProfit.toFixed(2)}
+            </Text>
+          </View>
+
+          {/* Revenue & Expenses Row */}
+          <View className="flex-row gap-3 mb-4">
+            <View className="flex-1 p-3 rounded-xl bg-blue-50">
+              <View className="flex-row items-center gap-1 mb-1">
+                <Ionicons name="trending-up" size={14} color="#2563eb" />
+                <Text className="text-xs text-blue-600">Revenue</Text>
+              </View>
+              <Text className="text-lg font-bold text-blue-700">
+                ₱{totalSalesRevenue.toFixed(2)}
+              </Text>
+              <Text className="text-xs text-blue-500">
+                {salesCount} sale{salesCount !== 1 ? "s" : ""}
+              </Text>
+            </View>
+            <View className="flex-1 p-3 rounded-xl bg-orange-50">
+              <View className="flex-row items-center gap-1 mb-1">
+                <Ionicons name="trending-down" size={14} color="#ea580c" />
+                <Text className="text-xs text-orange-600">Expenses</Text>
+              </View>
+              <Text className="text-lg font-bold text-orange-700">
+                ₱{totalExpenses.toFixed(2)}
+              </Text>
+              <Text className="text-xs text-orange-500">
+                {expensesCount} expense{expensesCount !== 1 ? "s" : ""}
+              </Text>
+            </View>
+          </View>
+
+          {/* Cost of Goods */}
+          <View className="flex-row items-center justify-between p-3 rounded-lg bg-gray-50">
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="cart-outline" size={16} color="#6b7280" />
+              <Text className="text-sm text-gray-600">Cost of Goods Sold</Text>
+            </View>
+            <Text className="text-sm font-semibold text-gray-700">
+              ₱{totalSalesCost.toFixed(2)}
+            </Text>
+          </View>
+
+          {/* View Details Link */}
+          <View className="flex-row items-center justify-center gap-1 pt-3 mt-3 border-t border-gray-100">
+            <Text className="text-sm font-medium text-indigo-600">
+              View Details
+            </Text>
+            <Ionicons name="arrow-forward" size={14} color="#6366f1" />
+          </View>
+        </Pressable>
+
         {/* Recent Alerts */}
         <View className="gap-5 p-4 bg-white rounded-xl max-h-96">
           <View className="flex-row items-center gap-1">
@@ -212,10 +322,14 @@ const ExpiringCard = ({ingredient}: {ingredient: AppwriteIngredient}) => {
     (expiryStart.getTime() - todayStart.getTime()) / (1000 * 60 * 60 * 24)
   );
 
-  const totalAmount =
-    ingredient.unit === "piece"
-      ? `${ingredient.stock} ${ingredient.unit}`
-      : `${ingredient.quantity * ingredient.stock}${ingredient.unit} (${ingredient.stock} pack${ingredient.stock > 1 ? "s" : ""})`;
+  const isPieces = ingredient.unit.toLowerCase() === "piece";
+  const packCount =
+    !isPieces && ingredient.quantity > 0
+      ? ingredient.stock / ingredient.quantity
+      : ingredient.stock;
+  const totalAmount = isPieces
+    ? `${ingredient.stock} ${ingredient.unit}${ingredient.stock > 1 ? "s" : ""}`
+    : `${ingredient.stock}${ingredient.unit} (${packCount.toFixed(1)} pack${packCount > 1 ? "s" : ""})`;
 
   const getCardStyles = () => {
     if (daysUntilExpiry < 0) {

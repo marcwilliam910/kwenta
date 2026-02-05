@@ -1,14 +1,14 @@
 import InventoryCard from "@/components/InventoryCard";
-import { useAuth } from "@/context/AuthContext";
-import { useIngredients } from "@/context/IngredientsContext";
-import { useReadAlert } from "@/context/ReadAlertContext";
-import { updateIngredientNotification } from "@/lib/services/databaseService";
+import {useAuth} from "@/context/AuthContext";
+import {useIngredients} from "@/context/IngredientsContext";
+import {useReadAlert} from "@/context/ReadAlertContext";
+import {updateIngredientNotification} from "@/lib/services/databaseService";
 import NotificationService from "@/lib/services/notificationService";
 import Ionicons from "@expo/vector-icons/Ionicons";
 import DateTimePicker from "@react-native-community/datetimepicker";
-import { Picker } from "@react-native-picker/picker";
-import { useFocusEffect } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {Picker} from "@react-native-picker/picker";
+import {useFocusEffect} from "expo-router";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -25,8 +25,8 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { showMessage } from "react-native-flash-message";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import {showMessage} from "react-native-flash-message";
+import {useSafeAreaInsets} from "react-native-safe-area-context";
 
 export type AppwriteIngredient = {
   $id: string;
@@ -63,7 +63,7 @@ export type IngredientErrors = Partial<Record<keyof IngredientInput, string>>;
 
 export function validateIngredient(
   input: IngredientInput,
-  setErrors: any,
+  setErrors: any
 ): boolean {
   const errors: IngredientErrors = {};
   let isValid = true;
@@ -109,7 +109,7 @@ export default function Inventory() {
   });
   const [errors, setErrors] = useState<IngredientErrors>({});
   const insets = useSafeAreaInsets();
-  const { height } = useWindowDimensions();
+  const {height} = useWindowDimensions();
   const {
     addIngredient,
     ingredients,
@@ -121,9 +121,9 @@ export default function Inventory() {
   const [selectedIngredient, setSelectedIngredient] =
     useState<AppwriteIngredient | null>(null);
   const [isEditing, setIsEditing] = useState(false);
-  const { user } = useAuth();
+  const {user} = useAuth();
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const { fetchUnread } = useReadAlert();
+  const {fetchUnread} = useReadAlert();
 
   const usableHeight = height - insets.top - insets.bottom;
   const nameInputRef = useRef<any>(null);
@@ -131,9 +131,14 @@ export default function Inventory() {
   const costInputRef = useRef<any>(null);
   const stockInputRef = useRef<any>(null);
 
+  const normalizeStockTotal = (value: number) => {
+    if (isNaN(value)) return 0;
+    return Math.max(0, Math.round(value));
+  };
+
   const sortedIngredients = useMemo(() => {
     return [...ingredients].sort(
-      (a, b) => b.$createdAt.getTime() - a.$createdAt.getTime(),
+      (a, b) => b.$createdAt.getTime() - a.$createdAt.getTime()
     );
   }, [ingredients]);
 
@@ -152,7 +157,7 @@ export default function Inventory() {
   };
 
   const onFormChange = (field: string, value: string | Date | null) => {
-    setIngredient((prev) => ({ ...prev, [field]: value }));
+    setIngredient((prev) => ({...prev, [field]: value}));
   };
 
   const handleOpenSheet = useCallback(() => {
@@ -168,17 +173,24 @@ export default function Inventory() {
   }, []);
 
   const handleAddIngredient = useCallback(async () => {
+    const quantityValue = Number(ingredient.quantity);
+    const stockValue = Number(ingredient.stock);
+    const stockTotal =
+      ingredient.unit === "piece"
+        ? stockValue
+        : normalizeStockTotal(stockValue * quantityValue);
+
     if (
       !validateIngredient(
         {
           name: ingredient.name.trim(),
           unit: ingredient.unit.trim(),
-          stock: Number(ingredient.stock),
-          quantity: Number(ingredient.quantity),
+          stock: stockValue,
+          quantity: quantityValue,
           cost: Number(ingredient.cost),
           expires: ingredient.expires,
         },
-        setErrors,
+        setErrors
       )
     )
       return;
@@ -191,9 +203,9 @@ export default function Inventory() {
 
       const payload: Omit<AppwriteIngredient, "$id" | "$createdAt"> = {
         name: ingredient.name.trim(),
-        stock: Number(ingredient.stock),
+        stock: stockTotal,
         unit: ingredient.unit.trim(),
-        quantity: Number(ingredient.quantity),
+        quantity: quantityValue,
         cost: Number(ingredient.cost),
         expires: expirationDate,
         notificationScheduled: false,
@@ -215,13 +227,13 @@ export default function Inventory() {
                   name: payload.name,
                   expires: expirationDate,
                 },
-                user!.$id,
+                user!.$id
               );
           }
 
           if (notificationId) {
             console.log(
-              `🔔 Updating ingredient with notification ID: ${notificationId}`,
+              `🔔 Updating ingredient with notification ID: ${notificationId}`
             );
             await updateIngredientNotification(res.$id, notificationId);
 
@@ -259,13 +271,24 @@ export default function Inventory() {
       handleCloseSheet();
       setIsSubmitting(false);
     }
-  }, [ingredient.name, ingredient.unit, ingredient.stock, ingredient.quantity, ingredient.cost, ingredient.expires, addIngredient, fetchUnread, user, handleCloseSheet]);
+  }, [
+    ingredient.name,
+    ingredient.unit,
+    ingredient.stock,
+    ingredient.quantity,
+    ingredient.cost,
+    ingredient.expires,
+    addIngredient,
+    fetchUnread,
+    user,
+    handleCloseSheet,
+  ]);
 
   const confirmDelete = async (ingredientToDelete: AppwriteIngredient) => {
     try {
       await NotificationService.cleanupNotificationForIngredient(
         ingredientToDelete.$id,
-        ingredientToDelete.notificationId,
+        ingredientToDelete.notificationId
       );
 
       await deleteIngredient(ingredientToDelete.$id, user?.$id as string);
@@ -289,17 +312,24 @@ export default function Inventory() {
   const handleEditIngredient = async () => {
     if (!selectedIngredient) return;
 
+    const quantityValue = Number(ingredient.quantity);
+    const stockValue = Number(ingredient.stock);
+    const stockTotal =
+      ingredient.unit === "piece"
+        ? stockValue
+        : normalizeStockTotal(stockValue * quantityValue);
+
     if (
       !validateIngredient(
         {
           name: ingredient.name.trim(),
           unit: ingredient.unit.trim(),
-          stock: Number(ingredient.stock),
-          quantity: Number(ingredient.quantity),
+          stock: stockValue,
+          quantity: quantityValue,
           cost: Number(ingredient.cost),
           expires: ingredient.expires,
         },
-        setErrors,
+        setErrors
       )
     )
       return;
@@ -312,9 +342,9 @@ export default function Inventory() {
 
       const payload: Partial<AppwriteIngredient> = {
         name: ingredient.name.trim(),
-        stock: Number(ingredient.stock),
+        stock: stockTotal,
         unit: ingredient.unit.trim(),
-        quantity: Number(ingredient.quantity),
+        quantity: quantityValue,
         cost: Number(ingredient.cost),
         expires: expirationDate,
       };
@@ -328,11 +358,11 @@ export default function Inventory() {
         if (selectedIngredient.notificationId) {
           try {
             await NotificationService.cancelNotification(
-              selectedIngredient.notificationId,
+              selectedIngredient.notificationId
             );
             console.log(
               "🗑️ Cancelled old notification:",
-              selectedIngredient.notificationId,
+              selectedIngredient.notificationId
             );
           } catch (error) {
             console.error("Failed to cancel old notification:", error);
@@ -340,7 +370,7 @@ export default function Inventory() {
         }
 
         await NotificationService.cleanupOldAlertsForIngredient(
-          selectedIngredient.$id,
+          selectedIngredient.$id
         );
 
         try {
@@ -351,7 +381,7 @@ export default function Inventory() {
                 name: payload.name!,
                 expires: expirationDate,
               },
-              user!.$id,
+              user!.$id
             );
 
           if (newNotificationId) {
@@ -399,13 +429,13 @@ export default function Inventory() {
       "Delete Ingredient",
       "Are you sure you want to delete this ingredient? This action cannot be undone.",
       [
-        { text: "Cancel", style: "cancel" },
+        {text: "Cancel", style: "cancel"},
         {
           text: "Delete",
           style: "destructive",
           onPress: () => confirmDelete(ingredient),
         },
-      ],
+      ]
     );
   };
 
@@ -413,13 +443,20 @@ export default function Inventory() {
     setSelectedIngredient(ingredient);
     setIsEditing(true);
     const selectedIngredient = ingredients.find(
-      (r) => r.$id === ingredient.$id,
+      (r) => r.$id === ingredient.$id
     );
     if (!selectedIngredient) return;
 
     setIngredient({
       name: selectedIngredient.name,
-      stock: selectedIngredient.stock.toString(),
+      stock:
+        selectedIngredient.unit === "piece"
+          ? selectedIngredient.stock.toString()
+          : selectedIngredient.quantity > 0
+            ? (
+                selectedIngredient.stock / selectedIngredient.quantity
+              ).toString()
+            : "0",
       unit: selectedIngredient.unit,
       quantity: selectedIngredient.quantity.toString(),
       cost: selectedIngredient.cost.toString(),
@@ -433,7 +470,7 @@ export default function Inventory() {
     useCallback(() => {
       cleanInputFields();
       setIsModalVisible(false);
-    }, []),
+    }, [])
   );
 
   useEffect(() => {
@@ -456,11 +493,11 @@ export default function Inventory() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
+    <View style={{flex: 1}}>
       {ingredients.length === 0 ? (
         <View
           className="items-center justify-center px-8"
-          style={{ height: usableHeight - 100 }}
+          style={{height: usableHeight - 100}}
         >
           <View className="items-center justify-center w-24 h-24 mb-6 bg-gray-100 rounded-full">
             <Ionicons name="restaurant-outline" size={48} color="#9CA3AF" />
@@ -505,7 +542,7 @@ export default function Inventory() {
               className="items-center justify-center rounded-full size-12 bg-emerald-500 active:bg-emerald-600"
               onPress={handleOpenSheet}
             >
-              {({ pressed }) => (
+              {({pressed}) => (
                 <Ionicons name="add" size={pressed ? 26 : 24} color="white" />
               )}
             </Pressable>
@@ -521,7 +558,7 @@ export default function Inventory() {
               />
             }
             data={sortedIngredients}
-            renderItem={({ item }) => (
+            renderItem={({item}) => (
               <InventoryCard
                 ingredient={item}
                 handleDelete={showAlertForDelete}
@@ -626,8 +663,8 @@ export default function Inventory() {
                       <Picker
                         selectedValue={ingredient.unit}
                         onValueChange={(value) => onFormChange("unit", value)}
-                        style={{ height: 55, color: "#6b7280" }}
-                        itemStyle={{ fontSize: 16, color: "black" }}
+                        style={{height: 55, color: "#6b7280"}}
+                        itemStyle={{fontSize: 16, color: "black"}}
                         enabled={!isEditing}
                         dropdownIconColor="#6b7280"
                       >
@@ -728,7 +765,10 @@ export default function Inventory() {
 
                   {isDatePickerOpen && (
                     <DateTimePicker
-                      value={ingredient.expires || new Date()}
+                      value={
+                        ingredient.expires ||
+                        Date.now() + 4 * 24 * 60 * 60 * 1000
+                      }
                       mode="date"
                       display="default"
                       minimumDate={
@@ -749,7 +789,7 @@ export default function Inventory() {
 
                 <View
                   className="gap-3"
-                  style={{ marginBottom: Platform.OS === "ios" ? 20 : 20 }}
+                  style={{marginBottom: Platform.OS === "ios" ? 20 : 20}}
                 >
                   {isEditing ? (
                     <Pressable

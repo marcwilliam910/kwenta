@@ -1,7 +1,7 @@
-import { AppwriteIngredient } from "@/app/(tabs)/inventory";
-import { Ionicons } from "@expo/vector-icons";
-import { differenceInDays, format, startOfDay } from "date-fns";
-import { Pressable, Text, View } from "react-native";
+import {AppwriteIngredient} from "@/app/(tabs)/inventory";
+import {Ionicons} from "@expo/vector-icons";
+import {differenceInDays, format, startOfDay} from "date-fns";
+import {Pressable, Text, View} from "react-native";
 
 type InventoryCardProps = {
   ingredient: AppwriteIngredient;
@@ -30,13 +30,15 @@ const InventoryCard = ({
   const isExpired = daysUntilExpiry !== null && daysUntilExpiry < 0;
   const isExpiringToday = daysUntilExpiry === 0;
 
-  const isLowStock = ingredient.stock < 5;
+  const isPieces = ingredient.unit.toLowerCase() === "piece";
+  const packCount =
+    !isPieces && ingredient.quantity > 0
+      ? ingredient.stock / ingredient.quantity
+      : ingredient.stock;
+  const isLowStock = packCount < 5;
   const isOutOfStock = ingredient.stock === 0;
 
-  const isPieces = ingredient.unit.toLowerCase() === "piece";
-  const totalAmount = isPieces
-    ? ingredient.stock
-    : ingredient.quantity * ingredient.stock;
+  const totalAmount = isPieces ? ingredient.stock : ingredient.stock;
   const displayUnit = isPieces ? "piece" : ingredient.unit;
 
   return (
@@ -76,8 +78,8 @@ const InventoryCard = ({
           </Text>
           {!isPieces && (
             <Text className="mt-1 text-sm text-gray-500">
-              {formatAmount(ingredient.stock)} pack
-              {ingredient.stock > 1 && "s"} × {formatAmount(ingredient.quantity)}
+              {formatAmount(packCount)} pack
+              {packCount > 1 && "s"} × {formatAmount(ingredient.quantity)}
               {ingredient.unit} each
             </Text>
           )}
@@ -126,14 +128,15 @@ const InventoryCard = ({
         </View>
 
         <View
-          className={`py-2 px-4 rounded-full ${isExpired
+          className={`py-2 px-4 rounded-full ${
+            isExpired
               ? "bg-red-100"
               : isExpiringToday
                 ? "bg-orange-100"
                 : isExpiringSoon
                   ? "bg-yellow-100"
                   : "bg-green-100"
-            }`}
+          }`}
         >
           <View className="flex-row items-center gap-1">
             <Ionicons
@@ -158,14 +161,15 @@ const InventoryCard = ({
               }
             />
             <Text
-              className={`font-semibold text-sm ${isExpired
+              className={`font-semibold text-sm ${
+                isExpired
                   ? "text-red-700"
                   : isExpiringToday
                     ? "text-orange-700"
                     : isExpiringSoon
                       ? "text-yellow-700"
                       : "text-green-700"
-                }`}
+              }`}
             >
               {isExpired
                 ? "Expired"
