@@ -25,6 +25,16 @@ import {showMessage} from "react-native-flash-message";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 
 // types
+type LaborCost = {
+  costPerDay: string;
+  employees: string;
+};
+
+type OverheadCost = {
+  type: OverheadType;
+  amount: string;
+  units: string;
+};
 type RecipeInput = {
   name: string;
   servings: number;
@@ -42,7 +52,7 @@ type RecipeErrors = {
 
 export function validateRecipe(
   input: RecipeInput,
-  setErrors: (errors: RecipeErrors) => void
+  setErrors: (errors: RecipeErrors) => void,
 ): boolean {
   const errors: RecipeErrors = {};
   let isValid = true;
@@ -94,7 +104,13 @@ type StockIngredient = {
   unit: string;
   quantity: number;
 };
+type OverheadType = "Rent" | "Utilities" | "Miscellaneous Fees";
 
+const OVERHEAD_TYPES: OverheadType[] = [
+  "Rent",
+  "Utilities",
+  "Miscellaneous Fees",
+];
 const formatAmount = (value: number) => {
   return Number.isInteger(value) ? value.toString() : value.toFixed(2);
 };
@@ -107,7 +123,7 @@ const clampStockValue = (value: number) => {
 export function validateStockAvailability(
   selectedIngredients: Record<string, number>,
   ingredientsList: StockIngredient[],
-  previousIngredients?: Record<string, number>
+  previousIngredients?: Record<string, number>,
 ): StockValidationResult {
   const insufficientItems: {
     name: string;
@@ -117,7 +133,7 @@ export function validateStockAvailability(
   }[] = [];
 
   for (const [ingredientId, requestedQty] of Object.entries(
-    selectedIngredients
+    selectedIngredients,
   )) {
     const ingredient = ingredientsList.find((ing) => ing.$id === ingredientId);
     if (!ingredient) continue;
@@ -174,12 +190,63 @@ export default function Recipes() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const [laborCosts, setLaborCosts] = useState<LaborCost[]>([]);
+  const [overheadCosts, setOverheadCosts] = useState<OverheadCost[]>([]);
+
   const servingsInputRef = useRef<any>(null);
+
+  const addLaborCost = () => {
+    setLaborCosts((prev) => [...prev, {costPerDay: "", employees: ""}]);
+  };
+
+  const addOverheadCost = () => {
+    const usedTypes = overheadCosts.map((c) => c.type);
+
+    const availableType =
+      OVERHEAD_TYPES.find((t) => !usedTypes.includes(t)) ?? OVERHEAD_TYPES[0];
+
+    setOverheadCosts((prev) => [
+      ...prev,
+      {type: availableType, amount: "", units: ""},
+    ]);
+  };
+
+  const updateOverheadCost = (
+    index: number,
+    field: keyof OverheadCost,
+    value: string,
+  ) => {
+    setOverheadCosts((prev) => {
+      const copy = [...prev];
+      copy[index] = {...copy[index], [field]: value};
+      return copy;
+    });
+  };
+
+  const removeOverheadCost = (index: number) => {
+    setOverheadCosts((prev) => prev.filter((_, i) => i !== index));
+  };
+
+  const updateLaborCost = (
+    index: number,
+    field: keyof LaborCost,
+    value: string,
+  ) => {
+    setLaborCosts((prev) => {
+      const copy = [...prev];
+      copy[index] = {...copy[index], [field]: value};
+      return copy;
+    });
+  };
+
+  const removeLaborCost = (index: number) => {
+    setLaborCosts((prev) => prev.filter((_, i) => i !== index));
+  };
 
   // Sort recipes by creation date (most recent first)
   const sortedRecipes = useMemo(() => {
     return [...recipes].sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
   }, [recipes]);
 
@@ -233,6 +300,8 @@ export default function Recipes() {
     setIsEditing(false);
     setSelectedId(null);
     setErrors({});
+    setLaborCosts([]);
+    setOverheadCosts([]);
   };
 
   const handleAddRecipe = async () => {
@@ -240,7 +309,7 @@ export default function Recipes() {
       Object.entries(selectedIngredients).map(([key, value]) => [
         key,
         Number(value),
-      ])
+      ]),
     );
 
     const input: RecipeInput = {
@@ -257,14 +326,14 @@ export default function Recipes() {
     // Validate stock availability
     const stockValidation = validateStockAvailability(
       numericIngredients,
-      ingredients
+      ingredients,
     );
 
     if (!stockValidation.isValid) {
       const errorMessages = stockValidation.insufficientItems
         .map(
           (item) =>
-            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`
+            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`,
         )
         .join("\n");
       setErrors((prev) => ({
@@ -278,23 +347,29 @@ export default function Recipes() {
       const payload = {
         ...input,
         ingredients: JSON.stringify(numericIngredients),
+        laborCosts: JSON.stringify(laborCosts),
+        overheadCosts: JSON.stringify(overheadCosts),
       };
       setIsSubmitting(true);
+
       const res = await addRecipe(payload);
 
       if (res.$id) {
         // Deduct stock from each ingredient used
         for (const [ingredientId, usedQty] of Object.entries(
-          numericIngredients
+          numericIngredients,
         )) {
           const ingredient = ingredients.find(
-            (ing) => ing.$id === ingredientId
+            (ing) => ing.$id === ingredientId,
           );
           if (ingredient) {
             const newStock = clampStockValue(ingredient.stock - usedQty);
             await updateIngredientStock(ingredientId, {stock: newStock});
           }
         }
+
+        // Force a fresh fetch so labor/overhead show immediately
+        await initialFetchRecipes();
 
         showMessage({
           message: "Recipe added",
@@ -340,7 +415,7 @@ export default function Recipes() {
       [
         {text: "Cancel", style: "cancel"},
         {text: "Delete", style: "destructive", onPress: confirmDelete},
-      ]
+      ],
     );
   };
 
@@ -350,7 +425,7 @@ export default function Recipes() {
       Object.entries(selectedIngredients).map(([key, value]) => [
         key,
         Number(value),
-      ])
+      ]),
     );
 
     const input: RecipeInput = {
@@ -372,14 +447,14 @@ export default function Recipes() {
     const stockValidation = validateStockAvailability(
       numericIngredients,
       ingredients,
-      originalIngredients
+      originalIngredients,
     );
 
     if (!stockValidation.isValid) {
       const errorMessages = stockValidation.insufficientItems
         .map(
           (item) =>
-            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`
+            `${item.name}: need ${formatAmount(item.requested)}${item.unit ? ` ${item.unit}` : ""}, only ${formatAmount(item.available)}${item.unit ? ` ${item.unit}` : ""} available`,
         )
         .join("\n");
       setErrors((prev) => ({
@@ -393,13 +468,12 @@ export default function Recipes() {
       const payload = {
         ...input,
         ingredients: JSON.stringify(numericIngredients),
+        laborCosts: JSON.stringify(laborCosts),
+        overheadCosts: JSON.stringify(overheadCosts),
       };
-
       setIsSubmitting(true);
       await editRecipe(selectedId, payload);
 
-      // Adjust stock based on the difference between old and new quantities
-      // Collect all ingredient IDs from both old and new
       const allIngredientIds = new Set([
         ...Object.keys(originalIngredients),
         ...Object.keys(numericIngredients),
@@ -414,11 +488,13 @@ export default function Recipes() {
         const difference = newQty - oldQty;
 
         if (difference !== 0) {
-          // If difference > 0, we need more (deduct). If difference < 0, we used less (restore).
           const newStock = clampStockValue(ingredient.stock - difference);
           await updateIngredientStock(ingredientId, {stock: newStock});
         }
       }
+
+      // Force a fresh fetch so updated labor/overhead show immediately
+      await initialFetchRecipes();
 
       showMessage({
         message: "Recipe Updated",
@@ -449,14 +525,32 @@ export default function Recipes() {
       servings: editingRecipe.servings.toString(),
       targetProfit: editingRecipe.targetProfit.toString(),
     });
+
     setSelectedIngredients(
       Object.fromEntries(
         Object.entries(editingRecipe.ingredients).map(([key, value]) => [
           key,
           value.toString(),
-        ])
-      )
+        ]),
+      ),
     );
+
+    // FIX: restore labor and overhead costs from the existing recipe
+    setLaborCosts(
+      (editingRecipe.laborCosts ?? []).map((l) => ({
+        costPerDay: l.costPerDay.toString(),
+        employees: l.employees.toString(),
+      })),
+    );
+
+    setOverheadCosts(
+      (editingRecipe.overheadCosts ?? []).map((o) => ({
+        type: o.type,
+        amount: o.amount.toString(),
+        units: o.units.toString(),
+      })),
+    );
+
     handleOpenSheet();
   };
 
@@ -468,12 +562,12 @@ export default function Recipes() {
     useCallback(() => {
       cleanInputFields();
       setIsModalVisible(false);
-    }, [])
+    }, []),
   );
 
   if (loading) {
     return (
-      <View className="justify-center items-center">
+      <View className="items-center justify-center">
         <ActivityIndicator size="large" color={"#3B82F6"} />
       </View>
     );
@@ -483,11 +577,11 @@ export default function Recipes() {
     <View style={{flex: 1}}>
       {recipes.length === 0 ? (
         <View
-          className="justify-center items-center px-8"
+          className="items-center justify-center px-8"
           style={{height: usableHeight - 100}}
         >
           {/* Icon Container */}
-          <View className="justify-center items-center mb-6 w-24 h-24 bg-gray-100 rounded-full">
+          <View className="items-center justify-center w-24 h-24 mb-6 bg-gray-100 rounded-full">
             <Ionicons name="restaurant-outline" size={48} color="#9CA3AF" />
           </View>
           {/* Main Message */}
@@ -509,9 +603,9 @@ export default function Recipes() {
             </Text>
           </Pressable>
           {/* Enhanced Tips Section */}
-          <View className="p-4 mt-8 w-full bg-amber-50 rounded-lg border border-amber-200">
-            <View className="flex-row gap-3 items-start">
-              <View className="justify-center items-center w-8 h-8 bg-amber-200 rounded-full">
+          <View className="w-full p-4 mt-8 border rounded-lg bg-amber-50 border-amber-200">
+            <View className="flex-row items-start gap-3">
+              <View className="items-center justify-center w-8 h-8 rounded-full bg-amber-200">
                 <Ionicons name="bulb-outline" size={16} color="#D97706" />
               </View>
               <View className="flex-1">
@@ -529,11 +623,11 @@ export default function Recipes() {
       ) : (
         <View style={{flex: 1}}>
           {/* Header with Add Button */}
-          <View className="flex-row justify-between items-center p-4">
+          <View className="flex-row items-center justify-between p-4">
             <Text className="text-xl font-bold text-gray-900">My Recipes</Text>
             <Pressable
               onPress={handleOpenSheet}
-              className="p-3 bg-emerald-500 rounded-full active:bg-emerald-600"
+              className="p-3 rounded-full bg-emerald-500 active:bg-emerald-600"
             >
               <Ionicons name="restaurant" size={20} color="white" />
             </Pressable>
@@ -595,7 +689,7 @@ export default function Recipes() {
               nestedScrollEnabled={true}
             >
               {/* Sheet Header */}
-              <View className="flex-row justify-between items-center pr-4 pb-4">
+              <View className="flex-row items-center justify-between pb-4 pr-4">
                 <Text className="text-xl font-semibold text-gray-900">
                   {isEditing ? "Edit Recipe" : "Add Recipe"}
                 </Text>
@@ -616,7 +710,7 @@ export default function Recipes() {
                     value={newRecipe.name}
                     onChangeText={(text) => onFormChange("name", text)}
                     placeholder="Enter recipe name"
-                    className="p-4 text-gray-900 bg-gray-50 rounded-xl border border-gray-200"
+                    className="p-4 text-gray-900 border border-gray-200 bg-gray-50 rounded-xl"
                     placeholderTextColor="#9ca3af"
                   />
                   {errors.name && (
@@ -638,7 +732,7 @@ export default function Recipes() {
                     spellCheck={false}
                     autoComplete="off"
                     autoCorrect={false}
-                    className="p-4 text-gray-900 bg-gray-50 rounded-xl border border-gray-200"
+                    className="p-4 text-gray-900 border border-gray-200 bg-gray-50 rounded-xl"
                     placeholderTextColor="#9ca3af"
                   />
                   {errors.servings && (
@@ -681,7 +775,7 @@ export default function Recipes() {
                         </TouchableOpacity>
                       ))}
                     </View>
-                    <View className="flex-row gap-3 items-center">
+                    <View className="flex-row items-center gap-3">
                       <Pressable
                         className={`grow py-3 rounded-xl border-2 ${
                           isCustomProfit
@@ -714,7 +808,7 @@ export default function Recipes() {
                             }}
                             placeholder="25%"
                             keyboardType="numeric"
-                            className="w-20 text-center text-gray-900 bg-gray-50 rounded-xl border border-gray-200"
+                            className="w-20 text-center text-gray-900 border border-gray-200 bg-gray-50 rounded-xl"
                             placeholderTextColor="#9ca3af"
                           />
                         </>
@@ -733,82 +827,109 @@ export default function Recipes() {
                   <Text className="mb-3 text-sm font-medium text-gray-700">
                     Ingredients
                   </Text>
-                  {ingredients.length === 0 ? (
-                    <View className="flex justify-center items-center p-6 bg-gray-50 rounded-xl">
-                      <Ionicons
-                        name="leaf-outline"
-                        size={28}
-                        color="#9CA3AF"
-                        style={{marginBottom: 8}}
-                      />
-                      <Text className="text-center text-gray-500">
-                        No ingredients available. Add some to get started.
-                      </Text>
-                    </View>
-                  ) : (
-                    <View className="rounded-xl">
-                      {/* Search/Filter Bar */}
-                      <View className="p-4 border-b border-gray-200">
-                        <View className="flex-row items-center px-3 bg-gray-50 rounded-xl border-2 border-gray-200">
-                          <Ionicons
-                            name="search"
-                            size={16}
-                            color="#9CA3AF"
-                            style={{marginRight: 8}}
-                          />
-                          <TextInput
-                            placeholder="Search ingredients..."
-                            placeholderTextColor="#9CA3AF"
-                            className="flex-1 text-gray-900"
-                            value={searchQuery}
-                            onChangeText={setSearchQuery}
-                          />
-                        </View>
-                      </View>
 
-                      <View style={{maxHeight: 350}}>
-                        <FlatList
-                          keyboardShouldPersistTaps="handled"
-                          nestedScrollEnabled={true}
-                          showsVerticalScrollIndicator={true}
-                          data={ingredients.filter((ingredient) =>
-                            ingredient.name
-                              .toLowerCase()
-                              .includes(searchQuery.toLowerCase())
-                          )}
-                          keyExtractor={(item) => item.$id}
-                          renderItem={({item: ingredient}) => (
-                            <IngredientSelectionCard
-                              ingredient={ingredient}
-                              selectedIngredients={selectedIngredients}
-                              toggleIngredient={toggleIngredient}
-                              updateQuantity={updateQuantity}
-                            />
-                          )}
-                          contentContainerStyle={{
-                            paddingVertical: 16,
-                          }}
-                        />
-                        <View className="p-4 bg-white rounded-b-xl border-t border-gray-200">
-                          <Text className="text-sm text-center text-gray-600">
-                            {Object.keys(selectedIngredients).length} ingredient
-                            {Object.keys(selectedIngredients).length === 1
-                              ? ""
-                              : "s"}{" "}
-                            selected
+                  {(() => {
+                    const availableIngredients = ingredients.filter(
+                      (ingredient) => {
+                        const isExpired =
+                          ingredient.expires &&
+                          new Date(ingredient.expires) < new Date();
+                        const isOutOfStock = ingredient.stock <= 0;
+                        return !isExpired && !isOutOfStock;
+                      },
+                    );
+
+                    const filteredIngredients = availableIngredients.filter(
+                      (ingredient) =>
+                        ingredient.name
+                          .toLowerCase()
+                          .includes(searchQuery.toLowerCase()),
+                    );
+
+                    if (availableIngredients.length === 0) {
+                      return (
+                        <View className="flex items-center justify-center p-6 bg-gray-50 rounded-xl">
+                          <Ionicons
+                            name="leaf-outline"
+                            size={28}
+                            color="#9CA3AF"
+                            style={{marginBottom: 8}}
+                          />
+                          <Text className="text-center text-gray-500">
+                            No ingredients available. Add some to get started.
                           </Text>
                         </View>
+                      );
+                    }
+
+                    return (
+                      <View className="rounded-xl">
+                        {/* Search/Filter Bar */}
+                        <View className="p-4 border-b border-gray-200">
+                          <View className="flex-row items-center px-3 border-2 border-gray-200 bg-gray-50 rounded-xl">
+                            <Ionicons
+                              name="search"
+                              size={16}
+                              color="#9CA3AF"
+                              style={{marginRight: 8}}
+                            />
+                            <TextInput
+                              placeholder="Search ingredients..."
+                              placeholderTextColor="#9CA3AF"
+                              className="flex-1 text-gray-900"
+                              value={searchQuery}
+                              onChangeText={setSearchQuery}
+                            />
+                          </View>
+                        </View>
+
+                        <View style={{maxHeight: 350}}>
+                          <FlatList
+                            keyboardShouldPersistTaps="handled"
+                            nestedScrollEnabled={true}
+                            showsVerticalScrollIndicator={true}
+                            data={filteredIngredients}
+                            keyExtractor={(item) => item.$id}
+                            renderItem={({item: ingredient}) => (
+                              <IngredientSelectionCard
+                                ingredient={ingredient}
+                                selectedIngredients={selectedIngredients}
+                                toggleIngredient={toggleIngredient}
+                                updateQuantity={updateQuantity}
+                              />
+                            )}
+                            contentContainerStyle={{paddingVertical: 16}}
+                            ListEmptyComponent={
+                              <View className="flex items-center justify-center p-6">
+                                <Text className="text-center text-gray-500">
+                                  No ingredients match your search.
+                                </Text>
+                              </View>
+                            }
+                          />
+                          <View className="p-4 bg-white border-t border-gray-200 rounded-b-xl">
+                            <Text className="text-sm text-center text-gray-600">
+                              {Object.keys(selectedIngredients).length}{" "}
+                              ingredient
+                              {Object.keys(selectedIngredients).length === 1
+                                ? ""
+                                : "s"}{" "}
+                              selected
+                            </Text>
+                          </View>
+                        </View>
                       </View>
-                    </View>
-                  )}
+                    );
+                  })()}
+
                   {errors.ingredients && (
                     <Text className="text-xs text-red-500">
                       {errors.ingredients}
                     </Text>
                   )}
                   {errors.insufficientStock && (
-                    <View className="p-3 mt-2 bg-red-50 rounded-xl border border-red-200">
-                      <View className="flex-row gap-2 items-start">
+                    <View className="p-3 mt-2 border border-red-200 bg-red-50 rounded-xl">
+                      <View className="flex-row items-start gap-2">
                         <Ionicons
                           name="alert-circle"
                           size={16}
@@ -821,6 +942,150 @@ export default function Recipes() {
                       </View>
                     </View>
                   )}
+                </View>
+
+                {/* Labor Costs */}
+                <View>
+                  <View className="flex-row items-center justify-between mb-3">
+                    <Text className="text-sm font-medium text-gray-700">
+                      Labor Costs (Optional)
+                    </Text>
+
+                    <Pressable
+                      onPress={addLaborCost}
+                      className="px-3 py-1 bg-blue-100 rounded-full"
+                    >
+                      <Text className="text-xs font-medium text-blue-700">
+                        + Add Labor
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {laborCosts.map((labor, index) => (
+                    <View
+                      key={index}
+                      className="p-4 mb-3 border border-gray-200 bg-gray-50 rounded-xl"
+                    >
+                      <TextInput
+                        placeholder="Labor Cost Per Day"
+                        keyboardType="numeric"
+                        value={labor.costPerDay}
+                        onChangeText={(text) =>
+                          updateLaborCost(index, "costPerDay", text)
+                        }
+                        className="p-3 mb-2 bg-white border border-gray-200 rounded-xl"
+                      />
+
+                      <TextInput
+                        placeholder="Number of Employees"
+                        keyboardType="numeric"
+                        value={labor.employees}
+                        onChangeText={(text) =>
+                          updateLaborCost(index, "employees", text)
+                        }
+                        className="p-3 mb-2 bg-white border border-gray-200 rounded-xl"
+                      />
+
+                      <Pressable
+                        onPress={() => removeLaborCost(index)}
+                        className="self-end mt-1"
+                      >
+                        <Text className="text-xs text-red-500">Remove</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+
+                {/* Overhead Costs */}
+                <View>
+                  <View className="flex-row items-center justify-between mb-3">
+                    <Text className="text-sm font-medium text-gray-700">
+                      Overhead Costs (Optional)
+                    </Text>
+
+                    <Pressable
+                      onPress={addOverheadCost}
+                      className="px-3 py-1 bg-blue-100 rounded-full"
+                    >
+                      <Text className="text-xs font-medium text-blue-700">
+                        + Add Overhead
+                      </Text>
+                    </Pressable>
+                  </View>
+
+                  {overheadCosts.map((cost, index) => (
+                    <View
+                      key={index}
+                      className="p-4 mb-3 border border-gray-200 bg-gray-50 rounded-xl"
+                    >
+                      <View className="flex-row gap-2 mb-3">
+                        {["Rent", "Utilities", "Miscellaneous Fees"].map(
+                          (type) => {
+                            // Disable if this type exists in another entry
+                            const isUsedElsewhere = overheadCosts.some(
+                              (c, i) => c.type === type && i !== index,
+                            );
+
+                            return (
+                              <Pressable
+                                key={type}
+                                onPress={() =>
+                                  updateOverheadCost(index, "type", type)
+                                }
+                                disabled={isUsedElsewhere}
+                                className={`px-3 py-1 rounded-full border ${
+                                  cost.type === type
+                                    ? "bg-emerald-100 border-emerald-400"
+                                    : isUsedElsewhere
+                                      ? "bg-gray-100 border-gray-200"
+                                      : "bg-white border-gray-300"
+                                }`}
+                              >
+                                <Text
+                                  className={`text-xs ${
+                                    cost.type === type
+                                      ? "text-emerald-700"
+                                      : isUsedElsewhere
+                                        ? "text-gray-400"
+                                        : "text-gray-600"
+                                  }`}
+                                >
+                                  {type}
+                                </Text>
+                              </Pressable>
+                            );
+                          },
+                        )}
+                      </View>
+
+                      <TextInput
+                        placeholder="Amount"
+                        keyboardType="numeric"
+                        value={cost.amount}
+                        onChangeText={(text) =>
+                          updateOverheadCost(index, "amount", text)
+                        }
+                        className="p-3 mb-2 bg-white border border-gray-200 rounded-xl"
+                      />
+
+                      <TextInput
+                        placeholder="Units Produced"
+                        keyboardType="numeric"
+                        value={cost.units}
+                        onChangeText={(text) =>
+                          updateOverheadCost(index, "units", text)
+                        }
+                        className="p-3 mb-2 bg-white border border-gray-200 rounded-xl"
+                      />
+
+                      <Pressable
+                        onPress={() => removeOverheadCost(index)}
+                        className="self-end mt-1"
+                      >
+                        <Text className="text-xs text-red-500">Remove</Text>
+                      </Pressable>
+                    </View>
+                  ))}
                 </View>
 
                 {/* Action Buttons */}
@@ -859,7 +1124,7 @@ export default function Recipes() {
                   )}
                   <Pressable
                     onPress={handleCloseSheet}
-                    className="flex-1 py-4 rounded-xl border border-gray-300 active:bg-gray-100"
+                    className="flex-1 py-4 border border-gray-300 rounded-xl active:bg-gray-100"
                   >
                     <Text className="font-medium text-center text-gray-700">
                       Cancel

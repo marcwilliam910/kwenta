@@ -28,6 +28,8 @@ import {
 import {showMessage} from "react-native-flash-message";
 import {useSafeAreaInsets} from "react-native-safe-area-context";
 
+const getMinExpiryDate = () => new Date(Date.now() + 4 * 24 * 60 * 60 * 1000);
+
 export type AppwriteIngredient = {
   $id: string;
   name: string;
@@ -63,7 +65,7 @@ export type IngredientErrors = Partial<Record<keyof IngredientInput, string>>;
 
 export function validateIngredient(
   input: IngredientInput,
-  setErrors: any
+  setErrors: any,
 ): boolean {
   const errors: IngredientErrors = {};
   let isValid = true;
@@ -105,7 +107,7 @@ export default function Inventory() {
     unit: "",
     quantity: "",
     cost: "",
-    expires: new Date(),
+    expires: getMinExpiryDate(),
   });
   const [errors, setErrors] = useState<IngredientErrors>({});
   const insets = useSafeAreaInsets();
@@ -138,7 +140,7 @@ export default function Inventory() {
 
   const sortedIngredients = useMemo(() => {
     return [...ingredients].sort(
-      (a, b) => b.$createdAt.getTime() - a.$createdAt.getTime()
+      (a, b) => b.$createdAt.getTime() - a.$createdAt.getTime(),
     );
   }, [ingredients]);
 
@@ -149,7 +151,7 @@ export default function Inventory() {
       unit: "",
       quantity: "",
       cost: "",
-      expires: new Date(),
+      expires: getMinExpiryDate(),
     });
     setErrors({});
     setSelectedIngredient(null);
@@ -190,7 +192,7 @@ export default function Inventory() {
           cost: Number(ingredient.cost),
           expires: ingredient.expires,
         },
-        setErrors
+        setErrors,
       )
     )
       return;
@@ -227,13 +229,13 @@ export default function Inventory() {
                   name: payload.name,
                   expires: expirationDate,
                 },
-                user!.$id
+                user!.$id,
               );
           }
 
           if (notificationId) {
             console.log(
-              `🔔 Updating ingredient with notification ID: ${notificationId}`
+              `🔔 Updating ingredient with notification ID: ${notificationId}`,
             );
             await updateIngredientNotification(res.$id, notificationId);
 
@@ -288,7 +290,7 @@ export default function Inventory() {
     try {
       await NotificationService.cleanupNotificationForIngredient(
         ingredientToDelete.$id,
-        ingredientToDelete.notificationId
+        ingredientToDelete.notificationId,
       );
 
       await deleteIngredient(ingredientToDelete.$id, user?.$id as string);
@@ -329,7 +331,7 @@ export default function Inventory() {
           cost: Number(ingredient.cost),
           expires: ingredient.expires,
         },
-        setErrors
+        setErrors,
       )
     )
       return;
@@ -358,11 +360,11 @@ export default function Inventory() {
         if (selectedIngredient.notificationId) {
           try {
             await NotificationService.cancelNotification(
-              selectedIngredient.notificationId
+              selectedIngredient.notificationId,
             );
             console.log(
               "🗑️ Cancelled old notification:",
-              selectedIngredient.notificationId
+              selectedIngredient.notificationId,
             );
           } catch (error) {
             console.error("Failed to cancel old notification:", error);
@@ -370,7 +372,7 @@ export default function Inventory() {
         }
 
         await NotificationService.cleanupOldAlertsForIngredient(
-          selectedIngredient.$id
+          selectedIngredient.$id,
         );
 
         try {
@@ -381,7 +383,7 @@ export default function Inventory() {
                 name: payload.name!,
                 expires: expirationDate,
               },
-              user!.$id
+              user!.$id,
             );
 
           if (newNotificationId) {
@@ -435,7 +437,7 @@ export default function Inventory() {
           style: "destructive",
           onPress: () => confirmDelete(ingredient),
         },
-      ]
+      ],
     );
   };
 
@@ -443,7 +445,7 @@ export default function Inventory() {
     setSelectedIngredient(ingredient);
     setIsEditing(true);
     const selectedIngredient = ingredients.find(
-      (r) => r.$id === ingredient.$id
+      (r) => r.$id === ingredient.$id,
     );
     if (!selectedIngredient) return;
 
@@ -470,7 +472,7 @@ export default function Inventory() {
     useCallback(() => {
       cleanInputFields();
       setIsModalVisible(false);
-    }, [])
+    }, []),
   );
 
   useEffect(() => {
@@ -771,9 +773,7 @@ export default function Inventory() {
                       }
                       mode="date"
                       display="default"
-                      minimumDate={
-                        new Date(Date.now() + 4 * 24 * 60 * 60 * 1000)
-                      }
+                      minimumDate={getMinExpiryDate()}
                       onChange={(event, selectedDate) => {
                         setIsDatePickerOpen(false);
                         if (selectedDate) onFormChange("expires", selectedDate);

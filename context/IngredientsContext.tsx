@@ -49,7 +49,7 @@ export function IngredientsProvider({children}: {children: React.ReactNode}) {
   async function initialFetchIngredients() {
     const ingredientsRes = await getTableData(
       "ingredients",
-      user?.$id as string
+      user?.$id as string,
     );
 
     const ingredients = ingredientsRes.map(transformIngredientDoc);
@@ -79,7 +79,7 @@ export function IngredientsProvider({children}: {children: React.ReactNode}) {
 
             if (event === "update") {
               return prev.map((ing) =>
-                ing.$id === doc.$id ? transformIngredientDoc(doc) : ing
+                ing.$id === doc.$id ? transformIngredientDoc(doc) : ing,
               );
             }
 
@@ -126,7 +126,7 @@ export function IngredientsProvider({children}: {children: React.ReactNode}) {
     // get all recipes of the user
     const recipes = (await getTableData(
       "recipes",
-      userId
+      userId,
     )) as unknown as AppwriteRecipe[];
 
     for (const recipe of recipes) {
@@ -166,7 +166,7 @@ export const useIngredients = () => {
   const context = useContext(IngredientsContext);
   if (context === undefined) {
     throw new Error(
-      "useIngredients must be used within an IngredientsProvider"
+      "useIngredients must be used within an IngredientsProvider",
     );
   }
   return context;

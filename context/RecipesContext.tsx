@@ -9,14 +9,27 @@ import {createContext, useContext, useEffect, useMemo, useState} from "react";
 import {Models} from "react-native-appwrite";
 import {useAuth} from "./AuthContext";
 
+export type OverheadType = "Rent" | "Utilities" | "Miscellaneous Fees";
+
+export type LaborCost = {
+  costPerDay: string;
+  employees: string;
+};
+
+export type OverheadCost = {
+  type: OverheadType;
+  amount: string;
+  units: string;
+};
+
 export type AppwriteRecipe = {
   $id: string;
   name: string;
   servings: number;
   targetProfit: number;
-  ingredients: {
-    [key: string]: number;
-  };
+  ingredients: Record<string, number>;
+  laborCosts: LaborCost[];
+  overheadCosts: OverheadCost[];
   createdAt: Date;
   userId: string;
 };
@@ -32,18 +45,34 @@ type RecipeContextType = {
 
 const RecipeContext = createContext<RecipeContextType | undefined>(undefined);
 
-// Helper function to transform recipe documents consistently
+const safeParse = (value: any, fallback: any) => {
+  if (!value) return fallback;
+
+  if (typeof value === "string") {
+    try {
+      return JSON.parse(value);
+    } catch {
+      return fallback;
+    }
+  }
+
+  return value;
+};
+
 const transformRecipeDoc = (doc: any): AppwriteRecipe => ({
   $id: doc.$id,
   name: doc.name,
   servings: Number(doc.servings),
   targetProfit: Number(doc.targetProfit),
-  ingredients:
-    typeof doc.ingredients === "string"
-      ? JSON.parse(doc.ingredients)
-      : doc.ingredients,
+
+  ingredients: safeParse(doc.ingredients, {}),
+
+  laborCosts: safeParse(doc.laborCosts, []),
+
+  overheadCosts: safeParse(doc.overheadCosts, []),
+
   userId: doc.userId,
-  // Handle missing or invalid createdAt
+
   createdAt:
     doc.createdAt && !isNaN(new Date(doc.createdAt).getTime())
       ? new Date(doc.createdAt)
@@ -60,18 +89,14 @@ export default function RecipeContextProvider({
 
   const {user} = useAuth();
 
-  // Sort recipes by creation date (most recent first)
   const sortedRecipes = useMemo(() => {
     return [...recipes].sort(
-      (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
     );
   }, [recipes]);
 
   async function initialFetchRecipes() {
-    // Initial fetch
     const recipesRes = await getTableData("recipes", user?.$id as string);
-
-    // Transform documents consistently
     const recipes = recipesRes.map(transformRecipeDoc);
     setRecipes(recipes);
   }
@@ -83,23 +108,20 @@ export default function RecipeContextProvider({
       try {
         setLoading(true);
 
-        // Initial fetch
         await initialFetchRecipes();
 
-        // Subscribe
         unsubscribe = subscribeUserRecipes(user!.$id, (doc, event) => {
           setRecipes((prev) => {
             if (event === "create") {
               const exists = prev.find((rec) => rec.$id === doc.$id);
-              if (exists) return prev; // Don't add if it already exists
+              if (exists) return prev;
 
-              // Transform the document the same way as initial fetch
               return [...prev, transformRecipeDoc(doc)];
             }
 
             if (event === "update") {
               return prev.map((rec) =>
-                rec.$id === doc.$id ? transformRecipeDoc(doc) : rec
+                rec.$id === doc.$id ? transformRecipeDoc(doc) : rec,
               );
             }
 
@@ -127,7 +149,10 @@ export default function RecipeContextProvider({
   }, [user?.$id]);
 
   const addRecipe = (data: any) => {
-    return createDocument("recipes", {...data, userId: user?.$id});
+    return createDocument("recipes", {
+      ...data,
+      userId: user?.$id,
+    });
   };
 
   const deleteRecipe = async (id: string) => {
@@ -141,7 +166,7 @@ export default function RecipeContextProvider({
   return (
     <RecipeContext.Provider
       value={{
-        recipes: sortedRecipes, // Return sorted recipes
+        recipes: sortedRecipes,
         loading,
         addRecipe,
         deleteRecipe,
@@ -156,8 +181,10 @@ export default function RecipeContextProvider({
 
 export const useRecipes = () => {
   const context = useContext(RecipeContext);
-  if (context === undefined) {
+
+  if (!context) {
     throw new Error("useRecipes must be used within a RecipeContextProvider");
   }
+
   return context;
 };

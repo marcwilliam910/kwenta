@@ -29,7 +29,7 @@ export default function Alerts(): JSX.Element {
   const [refreshing, setRefreshing] = useState<boolean>(false);
   const {height} = useWindowDimensions();
   const insets = useSafeAreaInsets();
-  const {setUnreadCount, unreadCount} = useReadAlert();
+  const {setUnreadCount} = useReadAlert();
   const [loadingMark, setLoadingMark] = useState(false);
   const [isFetching, setIsFetching] = useState(true);
 
