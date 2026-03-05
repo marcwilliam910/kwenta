@@ -38,6 +38,7 @@ export type AppwriteIngredient = {
   quantity: number;
   cost: number;
   expires: Date;
+  inflationRate: number;
   notificationId?: string;
   notificationScheduled?: boolean;
   $createdAt: Date;
@@ -50,6 +51,7 @@ type Ingredient = {
   quantity: string;
   cost: string;
   expires: Date;
+  inflationRate: string;
 };
 
 export type IngredientInput = {
@@ -98,9 +100,12 @@ export function validateIngredient(
   return isValid;
 }
 
+const INFLATION_PRESETS = ["5", "10", "15"];
+
 export default function Inventory() {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [isDatePickerOpen, setIsDatePickerOpen] = useState(false);
+  const [isCustomInflation, setIsCustomInflation] = useState(false);
   const [ingredient, setIngredient] = useState<Ingredient>({
     name: "",
     stock: "",
@@ -108,6 +113,7 @@ export default function Inventory() {
     quantity: "",
     cost: "",
     expires: getMinExpiryDate(),
+    inflationRate: "",
   });
   const [errors, setErrors] = useState<IngredientErrors>({});
   const insets = useSafeAreaInsets();
@@ -152,7 +158,9 @@ export default function Inventory() {
       quantity: "",
       cost: "",
       expires: getMinExpiryDate(),
+      inflationRate: "",
     });
+    setIsCustomInflation(false);
     setErrors({});
     setSelectedIngredient(null);
     setIsEditing(false);
@@ -210,12 +218,13 @@ export default function Inventory() {
         quantity: quantityValue,
         cost: Number(ingredient.cost),
         expires: expirationDate,
+        inflationRate: Number(ingredient.inflationRate) || 0,
         notificationScheduled: false,
       };
 
-      console.log(`🔄 Adding ingredient: ${payload.name}`);
+      console.log(payload);
+
       const res = await addIngredient(payload);
-      console.log(`✅ Ingredient added with ID: ${res?.$id}`);
 
       if (res?.$id) {
         try {
@@ -234,11 +243,7 @@ export default function Inventory() {
           }
 
           if (notificationId) {
-            console.log(
-              `🔔 Updating ingredient with notification ID: ${notificationId}`,
-            );
             await updateIngredientNotification(res.$id, notificationId);
-
             showMessage({
               message: "Ingredient Added",
               description: `${ingredient.name} has been added to your inventory. You'll be notified 3 days before expiration.`,
@@ -270,6 +275,8 @@ export default function Inventory() {
         type: "danger",
       });
     } finally {
+      await initialFetchIngredients(); // force fresh fetch so inflationRate shows immediately
+
       handleCloseSheet();
       setIsSubmitting(false);
     }
@@ -280,6 +287,7 @@ export default function Inventory() {
     ingredient.quantity,
     ingredient.cost,
     ingredient.expires,
+    ingredient.inflationRate,
     addIngredient,
     fetchUnread,
     user,
@@ -349,6 +357,7 @@ export default function Inventory() {
         quantity: quantityValue,
         cost: Number(ingredient.cost),
         expires: expirationDate,
+        inflationRate: Number(ingredient.inflationRate) || 0,
       };
 
       const expirationChanged =
@@ -360,10 +369,6 @@ export default function Inventory() {
         if (selectedIngredient.notificationId) {
           try {
             await NotificationService.cancelNotification(
-              selectedIngredient.notificationId,
-            );
-            console.log(
-              "🗑️ Cancelled old notification:",
               selectedIngredient.notificationId,
             );
           } catch (error) {
@@ -390,12 +395,10 @@ export default function Inventory() {
             payload.notificationId = newNotificationId;
             payload.notificationScheduled = true;
             notificationMessage = `${ingredient.name} has been updated. Notification rescheduled for new expiry date.`;
-            console.log("🔔 Scheduled new notification:", newNotificationId);
           } else {
             payload.notificationId = undefined;
             payload.notificationScheduled = false;
             notificationMessage = `${ingredient.name} has been updated. (Too close to expiration for notification)`;
-            console.log("⚠️ No notification scheduled - expires too soon");
           }
         } catch (error) {
           console.error("Failed to schedule new notification:", error);
@@ -449,6 +452,10 @@ export default function Inventory() {
     );
     if (!selectedIngredient) return;
 
+    const savedRate = (selectedIngredient.inflationRate ?? 0).toString();
+    const isPreset = INFLATION_PRESETS.includes(savedRate);
+
+    setIsCustomInflation(!isPreset && savedRate !== "" && savedRate !== "0");
     setIngredient({
       name: selectedIngredient.name,
       stock:
@@ -463,6 +470,7 @@ export default function Inventory() {
       quantity: selectedIngredient.quantity.toString(),
       cost: selectedIngredient.cost.toString(),
       expires: selectedIngredient.expires,
+      inflationRate: savedRate === "0" ? "" : savedRate,
     });
 
     handleOpenSheet();
@@ -485,9 +493,7 @@ export default function Inventory() {
     return (
       <View
         className="items-center justify-center"
-        style={{
-          height: usableHeight - 100,
-        }}
+        style={{height: usableHeight - 100}}
       >
         <ActivityIndicator size="large" color="#3B82F6" />
       </View>
@@ -602,7 +608,7 @@ export default function Inventory() {
             >
               <View className="flex-row items-center justify-between px-4 pb-4">
                 <Text className="text-xl font-semibold text-gray-900">
-                  Add New Ingredient
+                  {isEditing ? "Edit Ingredient" : "Add New Ingredient"}
                 </Text>
                 <TouchableOpacity
                   onPress={handleCloseSheet}
@@ -614,6 +620,7 @@ export default function Inventory() {
               </View>
 
               <View className="gap-5">
+                {/* Ingredient Name */}
                 <View className="gap-2">
                   <Text className="text-sm font-medium text-gray-700">
                     Ingredient Name
@@ -635,6 +642,7 @@ export default function Inventory() {
                   )}
                 </View>
 
+                {/* Unit */}
                 <View className="gap-2">
                   <Text className="mb-2 text-sm font-medium text-gray-700">
                     Unit
@@ -653,15 +661,11 @@ export default function Inventory() {
                         onFormChange("quantity", value);
                       }}
                       placeholder="Enter quantity"
-                      className="flex-1 p-4 text-gray-900 border-r border-gray-200 "
+                      className="flex-1 p-4 text-gray-900 border-r border-gray-200"
                       placeholderTextColor="#9ca3af"
                       keyboardType="numeric"
                     />
-                    <View
-                      style={{
-                        flexGrow: 2,
-                      }}
-                    >
+                    <View style={{flexGrow: 2}}>
                       <Picker
                         selectedValue={ingredient.unit}
                         onValueChange={(value) => onFormChange("unit", value)}
@@ -690,6 +694,7 @@ export default function Inventory() {
                   )}
                 </View>
 
+                {/* Cost Per Unit */}
                 <View className="gap-2">
                   <Text className="text-sm font-medium text-gray-700">
                     Cost Per Unit
@@ -718,6 +723,110 @@ export default function Inventory() {
                   )}
                 </View>
 
+                {/* Inflation Rate */}
+                <View className="gap-2">
+                  <Text className="text-sm font-medium text-gray-700">
+                    Inflation Rate{" "}
+                    <Text className="font-normal text-gray-400">
+                      (%) — Optional
+                    </Text>
+                  </Text>
+                  <View className="gap-2">
+                    <View className="flex-row gap-2">
+                      {INFLATION_PRESETS.map((rate) => (
+                        <TouchableOpacity
+                          key={rate}
+                          onPress={() => {
+                            onFormChange("inflationRate", rate);
+                            setIsCustomInflation(false);
+                          }}
+                          className={`flex-1 py-3 rounded-xl border-2 ${
+                            ingredient.inflationRate === rate &&
+                            !isCustomInflation
+                              ? "border-amber-500 bg-amber-50"
+                              : "border-gray-200 bg-white"
+                          }`}
+                          activeOpacity={0.8}
+                        >
+                          <Text
+                            className={`text-center font-medium ${
+                              ingredient.inflationRate === rate &&
+                              !isCustomInflation
+                                ? "text-amber-700"
+                                : "text-gray-700"
+                            }`}
+                          >
+                            {rate}%
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+
+                    <View className="flex-row items-center gap-3">
+                      <TouchableOpacity
+                        className={`flex-1 py-3 rounded-xl border-2 ${
+                          isCustomInflation
+                            ? "border-amber-500 bg-amber-50"
+                            : "border-gray-200 bg-white"
+                        }`}
+                        onPress={() => {
+                          setIsCustomInflation(true);
+                          onFormChange("inflationRate", "");
+                        }}
+                        activeOpacity={0.8}
+                      >
+                        <Text
+                          className={`text-center font-medium ${
+                            isCustomInflation
+                              ? "text-amber-700"
+                              : "text-gray-700"
+                          }`}
+                        >
+                          Custom
+                        </Text>
+                      </TouchableOpacity>
+
+                      {isCustomInflation && (
+                        <>
+                          <Text className="font-bold text-gray-700">=</Text>
+                          <TextInput
+                            value={ingredient.inflationRate}
+                            onChangeText={(text) => {
+                              text = text.replace(/[^0-9.]/g, "");
+                              onFormChange("inflationRate", text);
+                            }}
+                            placeholder="e.g. 8"
+                            keyboardType="numeric"
+                            className="w-20 p-3 text-center text-gray-900 border border-gray-200 bg-gray-50 rounded-xl"
+                            placeholderTextColor="#9ca3af"
+                          />
+                        </>
+                      )}
+                    </View>
+
+                    {/* Live adjusted cost preview */}
+                    {Number(ingredient.inflationRate) > 0 &&
+                      Number(ingredient.cost) > 0 && (
+                        <View className="flex-row items-center gap-2 px-3 py-2 mt-1 border rounded-xl bg-amber-50 border-amber-200">
+                          <Ionicons
+                            name="trending-up"
+                            size={14}
+                            color="#f59e0b"
+                          />
+                          <Text className="text-sm text-amber-700">
+                            Adjusted cost: ₱
+                            {(
+                              Number(ingredient.cost) *
+                              (1 + Number(ingredient.inflationRate) / 100)
+                            ).toFixed(2)}{" "}
+                            per {ingredient.unit === "piece" ? "piece" : "pack"}
+                          </Text>
+                        </View>
+                      )}
+                  </View>
+                </View>
+
+                {/* Current Stock */}
                 <View className="gap-2">
                   <Text className="text-sm font-medium text-gray-700">
                     Current Stock
@@ -749,6 +858,7 @@ export default function Inventory() {
                   )}
                 </View>
 
+                {/* Expiry Date */}
                 <View className="gap-2">
                   <Text className="text-base font-medium text-gray-800">
                     Expiry Date
@@ -767,10 +877,7 @@ export default function Inventory() {
 
                   {isDatePickerOpen && (
                     <DateTimePicker
-                      value={
-                        ingredient.expires ||
-                        Date.now() + 4 * 24 * 60 * 60 * 1000
-                      }
+                      value={ingredient.expires || getMinExpiryDate()}
                       mode="date"
                       display="default"
                       minimumDate={getMinExpiryDate()}
@@ -787,6 +894,7 @@ export default function Inventory() {
                   )}
                 </View>
 
+                {/* Action Buttons */}
                 <View
                   className="gap-3"
                   style={{marginBottom: Platform.OS === "ios" ? 20 : 20}}

@@ -17,6 +17,10 @@ const IngredientSelectionCard = ({
 }: IngredientSelectionCardProps) => {
   const isSelected = selectedIngredients[ingredient.$id] !== undefined;
 
+  const inflationRate = Number(ingredient.inflationRate ?? 0);
+  const displayCost = ingredient.cost * (1 + inflationRate / 100);
+  const hasInflation = inflationRate > 0;
+
   return (
     <View className="flex-row items-center p-4 border-b border-gray-100">
       {/* Selection Checkbox */}
@@ -34,8 +38,11 @@ const IngredientSelectionCard = ({
         <View>
           <Text className="font-medium text-gray-900">{ingredient.name}</Text>
           <Text className="text-sm text-gray-600">
-            ₱{ingredient.cost.toFixed(2)} per{" "}
+            ₱{displayCost.toFixed(2)} per{" "}
             {ingredient.unit === "piece" ? ingredient.unit : "pack"}
+            {hasInflation && (
+              <Text className="text-amber-500"> (+{inflationRate}%)</Text>
+            )}
           </Text>
         </View>
       </Pressable>

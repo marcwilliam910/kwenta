@@ -1,10 +1,10 @@
-import { AppwriteIngredient } from "@/app/(tabs)/inventory";
-import { Query } from "react-native-appwrite";
-import { appwriteConfig, databases, ID } from "../appwrite";
+import {AppwriteIngredient} from "@/app/(tabs)/inventory";
+import {Query} from "react-native-appwrite";
+import {appwriteConfig, databases, ID} from "../appwrite";
 
 export const createDocument = async (
   collectionId: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
 ) => {
   return await databases.createDocument({
     databaseId: appwriteConfig.databaseId,
@@ -16,7 +16,7 @@ export const createDocument = async (
 
 export const deleteDocument = async (
   collectionId: string,
-  documentId: string
+  documentId: string,
 ) => {
   return await databases.deleteDocument({
     databaseId: appwriteConfig.databaseId,
@@ -28,7 +28,7 @@ export const deleteDocument = async (
 export async function updateDocument(
   collectionId: string,
   documentId: string,
-  data: Record<string, unknown>
+  data: Record<string, unknown>,
 ) {
   return await databases.updateDocument({
     databaseId: appwriteConfig.databaseId,
@@ -40,7 +40,7 @@ export async function updateDocument(
 
 export async function updateIngredientNotification(
   ingredientId: string,
-  notificationId: string
+  notificationId: string,
 ) {
   try {
     await databases.updateDocument({
@@ -61,7 +61,7 @@ export async function getTableData(collectionId: string, userId: string) {
   const res = await databases.listDocuments(
     appwriteConfig.databaseId,
     collectionId,
-    [Query.equal("userId", userId), Query.orderDesc("$createdAt")]
+    [Query.equal("userId", userId), Query.orderDesc("$createdAt")],
   );
 
   return res.documents;
@@ -71,7 +71,7 @@ export async function getRowCount(collectionId: string, userId: string) {
   const res = await databases.listDocuments(
     appwriteConfig.databaseId,
     collectionId,
-    [Query.equal("userId", userId), Query.limit(1)]
+    [Query.equal("userId", userId), Query.limit(1)],
   );
 
   return res.total;
@@ -79,7 +79,7 @@ export async function getRowCount(collectionId: string, userId: string) {
 
 export async function getExpiringIngredients(
   collectionId: string,
-  userId: string
+  userId: string,
 ) {
   const now = new Date();
   const fiveDaysLater = new Date(now);
@@ -91,7 +91,7 @@ export async function getExpiringIngredients(
     [
       Query.equal("userId", userId),
       Query.lessThanEqual("expires", fiveDaysLater.toISOString()),
-    ]
+    ],
   );
 
   const expiringIngredients: AppwriteIngredient[] = expiring.documents.map(
@@ -104,8 +104,9 @@ export async function getExpiringIngredients(
       quantity: Number(doc.quantity),
       cost: Number(doc.cost),
       expires: new Date(doc.expires),
+      inflationRate: Number(doc.inflationRate ?? 0),
       $createdAt: new Date(doc.$createdAt),
-    })
+    }),
   );
 
   return expiringIngredients;
@@ -115,7 +116,7 @@ export async function getMonthlyData(
   collectionId: string,
   userId: string,
   month: number,
-  year: number
+  year: number,
 ) {
   const res = await databases.listDocuments(
     appwriteConfig.databaseId,
@@ -125,7 +126,7 @@ export async function getMonthlyData(
       Query.equal("month", month),
       Query.equal("year", year),
       Query.orderDesc("$createdAt"),
-    ]
+    ],
   );
 
   return res.documents;
@@ -135,7 +136,7 @@ export async function getAllUserData(collectionId: string, userId: string) {
   const res = await databases.listDocuments(
     appwriteConfig.databaseId,
     collectionId,
-    [Query.equal("userId", userId), Query.orderDesc("$createdAt")]
+    [Query.equal("userId", userId), Query.orderDesc("$createdAt")],
   );
 
   return res.documents;

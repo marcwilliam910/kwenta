@@ -18,7 +18,7 @@ const InventoryCard = ({
     return Number.isInteger(value) ? value.toString() : value.toFixed(2);
   };
 
-  const today = startOfDay(new Date()); // Start of today
+  const today = startOfDay(new Date());
 
   const daysUntilExpiry = ingredient.expires
     ? differenceInDays(startOfDay(new Date(ingredient.expires)), today)
@@ -26,7 +26,6 @@ const InventoryCard = ({
 
   const isExpiringSoon =
     daysUntilExpiry !== null && daysUntilExpiry <= 7 && daysUntilExpiry > 0;
-
   const isExpired = daysUntilExpiry !== null && daysUntilExpiry < 0;
   const isExpiringToday = daysUntilExpiry === 0;
 
@@ -38,8 +37,12 @@ const InventoryCard = ({
   const isLowStock = packCount < 5;
   const isOutOfStock = ingredient.stock === 0;
 
-  const totalAmount = isPieces ? ingredient.stock : ingredient.stock;
+  const totalAmount = ingredient.stock;
   const displayUnit = isPieces ? "piece" : ingredient.unit;
+
+  const inflationRate = Number(ingredient.inflationRate ?? 0);
+  const hasInflation = inflationRate > 0;
+  const adjustedCost = ingredient.cost * (1 + inflationRate / 100);
 
   return (
     <View className="p-5 mb-4 bg-white border border-gray-100 shadow-sm rounded-2xl">
@@ -52,7 +55,18 @@ const InventoryCard = ({
           <Text className="text-base text-gray-600">
             ₱{ingredient.cost.toFixed(2)} per {isPieces ? "piece" : "pack"}
           </Text>
+
+          {hasInflation && (
+            <View className="flex-row items-center gap-1 mt-1">
+              <Ionicons name="trending-up" size={13} color="#f59e0b" />
+              <Text className="text-sm text-amber-600">
+                Inflation: {inflationRate}% → ₱{adjustedCost.toFixed(2)} per{" "}
+                {isPieces ? "piece" : "pack"}
+              </Text>
+            </View>
+          )}
         </View>
+
         <View className="flex-row gap-3">
           <Pressable
             className="p-2 rounded-full bg-gray-50 active:bg-gray-200"

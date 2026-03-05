@@ -20,24 +20,25 @@ type ContextType = {
   initialFetchIngredients: () => Promise<void>;
 };
 
-// Helper function to transform documents consistently
-const transformIngredientDoc = (doc: any) => ({
-  $id: doc.$id,
-  name: doc.name,
-  stock: Number(doc.stock),
-  unit: doc.unit,
-  userId: doc.userId,
-  quantity: Number(doc.quantity),
-  cost: Number(doc.cost),
-  expires: new Date(doc.expires),
-  notificationId: doc.notificationId,
-  notificationScheduled: doc.notificationScheduled,
-  // Use current time if $createdAt is missing/invalid
-  $createdAt:
-    doc.$createdAt && !isNaN(new Date(doc.$createdAt).getTime())
-      ? new Date(doc.$createdAt)
-      : new Date(),
-});
+const transformIngredientDoc = (doc: any) => {
+  return {
+    $id: doc.$id,
+    name: doc.name,
+    stock: Number(doc.stock),
+    unit: doc.unit,
+    userId: doc.userId,
+    quantity: Number(doc.quantity),
+    cost: Number(doc.cost),
+    expires: new Date(doc.expires),
+    inflationRate: Number(doc.inflationRate ?? 0),
+    notificationId: doc.notificationId,
+    notificationScheduled: doc.notificationScheduled,
+    $createdAt:
+      doc.$createdAt && !isNaN(new Date(doc.$createdAt).getTime())
+        ? new Date(doc.$createdAt)
+        : new Date(),
+  };
+};
 
 const IngredientsContext = createContext<ContextType | undefined>(undefined);
 
@@ -51,9 +52,7 @@ export function IngredientsProvider({children}: {children: React.ReactNode}) {
       "ingredients",
       user?.$id as string,
     );
-
     const ingredients = ingredientsRes.map(transformIngredientDoc);
-
     setIngredients(ingredients);
   }
 
@@ -63,30 +62,23 @@ export function IngredientsProvider({children}: {children: React.ReactNode}) {
     async function setupIngredientsSubscription() {
       try {
         setLoading(true);
-        // Initial fetch
         await initialFetchIngredients();
 
-        // Subscribe
         unsubscribe = subscribeUserIngredients(user!.$id, (doc, event) => {
           setIngredients((prev) => {
             if (event === "create") {
-              // Check if ingredient already exists to prevent duplicates
               const exists = prev.find((ing) => ing.$id === doc.$id);
-              if (exists) return prev; // Don't add if it already exists
-
+              if (exists) return prev;
               return [...prev, transformIngredientDoc(doc)];
             }
-
             if (event === "update") {
               return prev.map((ing) =>
                 ing.$id === doc.$id ? transformIngredientDoc(doc) : ing,
               );
             }
-
             if (event === "delete") {
               return prev.filter((ing) => ing.$id !== doc.$id);
             }
-
             return prev;
           });
         });
@@ -106,12 +98,11 @@ export function IngredientsProvider({children}: {children: React.ReactNode}) {
     };
   }, [user?.$id]);
 
-  // ✅ Expose functions here
   function addIngredient(data: Omit<AppwriteIngredient, "$id">) {
     return createDocument("ingredients", {
       ...data,
       userId: user?.$id,
-      notificationScheduled: false, // Initialize as false
+      notificationScheduled: false,
     });
   }
 
@@ -120,17 +111,14 @@ export function IngredientsProvider({children}: {children: React.ReactNode}) {
   }
 
   async function deleteIngredient(id: string, userId: string) {
-    // delete the ingredient row
     await deleteDocument("ingredients", id);
 
-    // get all recipes of the user
     const recipes = (await getTableData(
       "recipes",
       userId,
     )) as unknown as AppwriteRecipe[];
 
     for (const recipe of recipes) {
-      // parse ingredients if stored as string
       const ingredients =
         typeof recipe.ingredients === "string"
           ? JSON.parse(recipe.ingredients)
@@ -138,9 +126,8 @@ export function IngredientsProvider({children}: {children: React.ReactNode}) {
 
       if (ingredients[id] !== undefined) {
         delete ingredients[id];
-
         await updateDocument("recipes", recipe.$id, {
-          ingredients: JSON.stringify(ingredients), // re-stringify for Appwrite
+          ingredients: JSON.stringify(ingredients),
         });
       }
     }
